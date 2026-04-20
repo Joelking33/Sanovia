@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useSyncExternalStore } from 'react'
 
 type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE'
 
@@ -56,6 +56,11 @@ const categories = [
 export default function Home() {
   const [expandedCategory, setExpandedCategory] = useState<string | null>('Authentification')
   const [copiedPath, setCopiedPath] = useState<string | null>(null)
+  const origin = useSyncExternalStore(
+    () => () => {},
+    () => window.location.origin,
+    () => ''
+  )
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text)
@@ -176,25 +181,25 @@ export default function Home() {
           <div className="grid gap-4 md:grid-cols-2">
             <QuickTest
               title="Inscription"
-              curl={`curl -X POST ${typeof window !== 'undefined' ? window.location.origin : ''}/api/auth/register \\
+              curl={`curl -X POST ${origin}/api/auth/register \\
   -H "Content-Type: application/json" \\
   -d '{"email":"test@example.com","password":"Password123","name":"Test User"}'`}
             />
             <QuickTest
               title="Connexion"
-              curl={`curl -X POST ${typeof window !== 'undefined' ? window.location.origin : ''}/api/auth/login \\
+              curl={`curl -X POST ${origin}/api/auth/login \\
   -H "Content-Type: application/json" \\
   -d '{"email":"test@example.com","password":"Password123"}'`}
             />
             <QuickTest
               title="Question Santé"
-              curl={`curl -X POST ${typeof window !== 'undefined' ? window.location.origin : ''}/api/health/tips \\
+              curl={`curl -X POST ${origin}/api/health/tips \\
   -H "Content-Type: application/json" \\
   -d '{"question":"Comment traiter une petite brûlure?","category":"premiers_secours","language":"fr"}'`}
             />
             <QuickTest
               title="Catégories Santé"
-              curl={`curl ${typeof window !== 'undefined' ? window.location.origin : ''}/api/health/categories?language=fr`}
+              curl={`curl ${origin}/api/health/categories?language=fr`}
             />
           </div>
         </div>
