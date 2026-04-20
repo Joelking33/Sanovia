@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sanovia</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg-primary: #0d1117;
+    --bg-secondary: #161b22;
+    --bg-sidebar: #0d1117;
+    --bg-message-bot: #1c2333;
+    --bg-input: #161b22;
+    --accent: #00c6a7;
+    --accent2: #00a8e8;
+    --text-primary: #e6edf3;
+    --text-secondary: #8b949e;
+    --border: #21262d;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* URGENCES BANNER */
+  .urgences-bar {
+    background: linear-gradient(90deg, #7b0000 0%, #b91c1c 50%, #7b0000 100%);
+    border-bottom: 1px solid #ef4444;
+    padding: 0 16px;
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+    flex-shrink: 0;
+    height: 38px;
+  }
+
+  .urgences-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #fca5a5;
+    letter-spacing: 0.06em;
+    white-space: nowrap;
+    padding-right: 14px;
+    border-right: 1px solid rgba(255,255,255,0.2);
+    flex-shrink: 0;
+    text-transform: uppercase;
+  }
+
+  .urgences-pulse {
+    width: 7px; height: 7px;
+    background: #ef4444; border-radius: 50%;
+    animation: pulse 1.4s infinite;
+  }
+  @keyframes pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(239,68,68,0.6); }
+    70%  { box-shadow: 0 0 0 7px rgba(239,68,68,0); }
+    100% { box-shadow: 0 0 0 0 rgba(239,68,68,0); }
+  }
+
+  .urgences-scroll-wrap {
+    flex: 1;
+    overflow: hidden;
+    margin-left: 14px;
+    -webkit-mask-image: linear-gradient(to right, transparent 0%, black 6%, black 94%, transparent 100%);
+    mask-image: linear-gradient(to right, transparent 0%, black 6%, black 94%, transparent 100%);
+  }
+
+  .urgences-track {
+    display: flex;
+    width: max-content;
+    animation: scroll-u 40s linear infinite;
+  }
+  .urgences-track:hover { animation-play-state: paused; }
+
+  @keyframes scroll-u {
+    0%   { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+  }
+
+  .urgence-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-right: 24px;
+    font-size: 12px;
+    white-space: nowrap;
+    color: #fff;
+    padding: 2px 10px;
+    border-radius: 20px;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.12);
+    cursor: default;
+    transition: background 0.2s;
+  }
+  .urgence-chip:hover { background: rgba(255,255,255,0.18); }
+  .urgence-chip .chip-label { color: #fca5a5; font-weight: 600; }
+  .urgence-chip a { color: #fde68a; font-weight: 700; text-decoration: none; }
+  .urgence-chip a:hover { text-decoration: underline; }
+
+  /* TOPBAR */
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 20px; height: 52px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-secondary);
+    position: relative; z-index: 100; flex-shrink: 0;
+  }
+  .topbar-left { display: flex; align-items: center; gap: 10px; }
+
+  .hamburger {
+    display: none; flex-direction: column; gap: 5px;
+    cursor: pointer; padding: 6px; border-radius: 6px; transition: background 0.2s;
+  }
+  .hamburger:hover { background: rgba(255,255,255,0.08); }
+  .hamburger span {
+    display: block; width: 20px; height: 2px;
+    background: var(--text-primary); border-radius: 2px; transition: all 0.3s;
+  }
+  .hamburger.open span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+  .hamburger.open span:nth-child(2) { opacity: 0; }
+  .hamburger.open span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+
+  .logo { display: flex; align-items: center; gap: 8px; }
+  .logo-icon {
+    width: 32px; height: 32px; border-radius: 8px;
+    background: linear-gradient(135deg,rgba(0,198,167,.3),rgba(0,168,232,.3));
+    border: 1px solid rgba(0,198,167,.4);
+    display: flex; align-items: center; justify-content: center; font-size: 18px;
+  }
+  .logo-name {
+    font-size: 16px; font-weight: 700;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+
+  .topbar-right { display: flex; align-items: center; gap: 10px; }
+
+  .lang-selector {
+    display: flex; align-items: center; gap: 6px;
+    background: rgba(255,255,255,.06); border: 1px solid var(--border);
+    border-radius: 8px; padding: 4px 10px; font-size: 13px;
+  }
+  .lang-selector select {
+    background: none; border: none; color: var(--text-primary);
+    font-size: 13px; cursor: pointer; outline: none;
+  }
+
+  .theme-btn {
+    width: 34px; height: 34px; border-radius: 8px;
+    border: 1px solid var(--border); background: rgba(255,255,255,.06);
+    color: var(--text-primary); cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; transition: background 0.2s;
+  }
+  .theme-btn:hover { background: rgba(255,255,255,.12); }
+
+  .disconnect-btn {
+    font-size: 13px; padding: 6px 12px; border-radius: 8px;
+    border: 1px solid var(--border); background: none;
+    color: var(--text-primary); cursor: pointer; transition: background 0.2s;
+  }
+  .disconnect-btn:hover { background: rgba(255,255,255,.06); }
+
+  .avatar {
+    width: 34px; height: 34px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700; color: #fff; flex-shrink: 0;
+  }
+
+  /* LAYOUT */
+  .main { display: flex; flex: 1; overflow: hidden; }
+
+  /* SIDEBAR */
+  .sidebar {
+    width: 280px; background: var(--bg-sidebar);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    padding: 16px 12px; gap: 12px;
+    flex-shrink: 0; transition: transform 0.3s ease;
+  }
+  .new-conv-btn {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 14px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border: none; border-radius: 10px; color: #fff;
+    font-size: 14px; font-weight: 600; cursor: pointer; transition: opacity 0.2s;
+  }
+  .new-conv-btn:hover { opacity: 0.9; }
+  .conversations-list { display: flex; flex-direction: column; gap: 4px; overflow-y: auto; }
+  .conv-item {
+    padding: 10px 12px; border-radius: 10px; cursor: pointer;
+    transition: background 0.2s; background: rgba(255,255,255,.06);
+  }
+  .conv-item:hover { background: rgba(255,255,255,.1); }
+  .conv-item.active { background: rgba(0,198,167,.15); }
+  .conv-title { font-size: 14px; font-weight: 500; }
+  .conv-date { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+  .no-conv { font-size: 14px; color: var(--text-secondary); padding: 10px 12px; }
+
+  .sidebar-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,.5); z-index: 90;
+  }
+
+  /* CHAT */
+  .chat-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+  .messages {
+    flex: 1; overflow-y: auto;
+    padding: 24px 20px;
+    display: flex; flex-direction: column; gap: 20px;
+    scroll-behavior: smooth;
+  }
+  .messages::-webkit-scrollbar { width: 4px; }
+  .messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  /* WELCOME */
+  .welcome {
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    flex: 1; gap: 16px; text-align: center; padding: 20px;
+  }
+  .welcome-icon {
+    width: 80px; height: 80px; border-radius: 20px;
+    background: linear-gradient(135deg,rgba(0,198,167,.2),rgba(0,168,232,.2));
+    border: 1px solid rgba(0,198,167,.3);
+    display: flex; align-items: center; justify-content: center; font-size: 40px;
+  }
+  .welcome h2 {
+    font-size: 22px; font-weight: 700;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .welcome p { font-size: 15px; color: var(--text-secondary); max-width: 380px; line-height: 1.6; }
+  .welcome-disclaimer {
+    padding: 10px 16px; background: rgba(234,179,8,.08);
+    border: 1px solid rgba(234,179,8,.25); border-radius: 10px;
+    font-size: 13px; color: #fbbf24; line-height: 1.5; max-width: 400px;
+  }
+
+  /* MESSAGES */
+  .msg-row { display: flex; gap: 10px; align-items: flex-end; }
+  .msg-row.user { flex-direction: row-reverse; }
+
+  .bot-avatar {
+    width: 32px; height: 32px; border-radius: 50%;
+    background: linear-gradient(135deg,rgba(0,198,167,.3),rgba(0,168,232,.3));
+    border: 1px solid rgba(0,198,167,.4);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; flex-shrink: 0;
+  }
+
+  .bubble {
+    max-width: 65%; padding: 12px 16px; border-radius: 18px;
+    font-size: 14px; line-height: 1.7;
+  }
+  .bubble.bot {
+    background: var(--bg-message-bot); border: 1px solid var(--border);
+    border-bottom-left-radius: 4px; color: var(--text-primary); white-space: pre-wrap;
+  }
+  .bubble.user {
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border-bottom-right-radius: 4px; color: #fff;
+  }
+  .bubble.hors-sujet {
+    background: rgba(234,179,8,.08); border: 1px solid rgba(234,179,8,.3); color: #fbbf24;
+  }
+  .bubble-time { font-size: 11px; color: var(--text-secondary); margin-top: 4px; }
+  .msg-row.user .bubble-time { text-align: right; }
+
+  /* typing */
+  .typing-dots { display: flex; gap: 5px; padding: 14px 18px; }
+  .typing-dots span {
+    width: 7px; height: 7px; border-radius: 50%; background: var(--text-secondary);
+    animation: tdot 1.2s infinite;
+  }
+  .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+  .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes tdot {
+    0%,80%,100% { transform: translateY(0); opacity:.5; }
+    40% { transform: translateY(-7px); opacity:1; }
+  }
+
+  /* API KEY MODAL */
+  .modal-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,.75);
+    z-index: 300; display: flex; align-items: center; justify-content: center;
+  }
+  .modal-box {
+    background: var(--bg-secondary); border: 1px solid var(--border);
+    border-radius: 16px; padding: 28px 26px; width: 92%; max-width: 440px;
+  }
+  .modal-box h3 {
+    font-size: 17px; font-weight: 700; margin-bottom: 8px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .modal-box p { font-size: 13px; color: var(--text-secondary); margin-bottom: 16px; line-height: 1.55; }
+  .modal-box input {
+    width: 100%; padding: 10px 14px;
+    background: var(--bg-primary); border: 1px solid var(--border);
+    border-radius: 8px; color: var(--text-primary); font-size: 14px;
+    outline: none; margin-bottom: 12px;
+  }
+  .modal-box input:focus { border-color: var(--accent); }
+  .modal-save-btn {
+    width: 100%; padding: 11px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border: none; border-radius: 8px; color: #fff;
+    font-size: 14px; font-weight: 600; cursor: pointer; transition: opacity 0.2s;
+  }
+  .modal-save-btn:hover { opacity: .9; }
+  .modal-note { font-size: 11px; color: var(--text-secondary); margin-top: 10px; text-align: center; }
+  .modal-note a { color: var(--accent); }
+
+  /* INPUT */
+  .input-area {
+    padding: 14px 20px; border-top: 1px solid var(--border); background: var(--bg-secondary);
+  }
+  .input-row {
+    display: flex; align-items: flex-end; gap: 10px;
+    background: var(--bg-input); border: 1px solid var(--border);
+    border-radius: 14px; padding: 8px 12px; transition: border-color 0.2s;
+  }
+  .input-row:focus-within { border-color: var(--accent); }
+  .attach-btn {
+    background: none; border: none; color: var(--text-secondary);
+    cursor: pointer; font-size: 18px; padding: 4px; border-radius: 6px;
+    transition: color 0.2s, background 0.2s; flex-shrink: 0;
+  }
+  .attach-btn:hover { color: var(--accent); background: rgba(0,198,167,.1); }
+  #message-input {
+    flex: 1; background: none; border: none; outline: none;
+    color: var(--text-primary); font-size: 14px;
+    resize: none; max-height: 120px; line-height: 1.5; padding: 4px 0;
+  }
+  #message-input::placeholder { color: var(--text-secondary); }
+  .mic-btn, .send-btn {
+    width: 36px; height: 36px; border-radius: 50%; border: none;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; transition: opacity 0.2s, transform 0.1s;
+  }
+  .mic-btn { background: rgba(255,255,255,.06); color: var(--text-secondary); font-size: 16px; }
+  .mic-btn:hover { background: rgba(255,255,255,.12); }
+  .send-btn {
+    background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff; font-size: 16px;
+  }
+  .send-btn:hover { opacity: .9; }
+  .send-btn:active { transform: scale(.95); }
+  .send-btn:disabled { opacity: .35; cursor: not-allowed; }
+
+  /* RESPONSIVE */
+  @media (max-width: 768px) {
+    .hamburger { display: flex; }
+    .sidebar {
+      position: fixed; top: 90px; left: 0; bottom: 0;
+      z-index: 95; transform: translateX(-100%); width: 260px;
+    }
+    .sidebar.open { transform: translateX(0); }
+    .sidebar-overlay.open { display: block; }
+    .disconnect-btn { display: none; }
+    .lang-selector span { display: none; }
+    .bubble { max-width: 82%; }
+    .messages { padding: 14px 10px; }
+    .input-area { padding: 10px; }
+    .urgences-bar { height: 34px; }
+    .urgences-label { font-size: 10px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- NUMÉROS D'URGENCE CI -->
+<div class="urgences-bar">
+  <div class="urgences-label">
+    <div class="urgences-pulse"></div>
+    🚨 Urgences CI
+  </div>
+  <div class="urgences-scroll-wrap">
+    <div class="urgences-track" id="urgences-track"></div>
+  </div>
+</div>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="topbar-left">
+    <div class="hamburger" id="hamburger" onclick="toggleSidebar()">
+      <span></span><span></span><span></span>
+    </div>
+    <div class="logo">
+      <div class="logo-icon">🧠</div>
+      <span class="logo-name">Sanovia</span>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <div class="lang-selector">
+      <span style="font-size:13px;font-weight:600;color:var(--text-primary)">FR</span>
+      <select>
+        <option value="fr">FR</option>
+        <option value="en">EN</option>
+      </select>
+    </div>
+    <button class="theme-btn" onclick="toggleTheme()">☀️</button>
+    <button class="disconnect-btn" onclick="logout()">Se déconnecter</button>
+    <div class="avatar">YJ</div>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+  <div class="sidebar-overlay" id="overlay" onclick="closeSidebar()"></div>
+
+  <div class="sidebar" id="sidebar">
+    <button class="new-conv-btn" onclick="newConversation()">
+      <span style="font-size:18px">+</span> Nouvelle conversation
+    </button>
+    <div class="conversations-list" id="conv-list"></div>
+  </div>
+
+  <div class="chat-area">
+    <div class="messages" id="messages"></div>
+    <div class="input-area">
+      <div class="input-row">
+        <button class="attach-btn">🖼</button>
+        <textarea id="message-input" placeholder="Posez votre question de santé..." rows="1"
+          onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <button class="mic-btn">🎤</button>
+          <button class="send-btn" id="send-btn" onclick="sendMessage()">➤</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- API KEY MODAL -->
+<div class="modal-backdrop" id="api-modal" style="display:none">
+  <div class="modal-box">
+    <h3>🔑 Clé API OpenRouter requise</h3>
+    <p>
+      Sanovia utilise OpenRouter pour alimenter son IA. Entrez votre clé API ci-dessous.
+      Elle sera stockée localement dans votre navigateur et ne sera jamais partagée.
+    </p>
+    <input type="password" id="api-key-input" placeholder="sk-or-v1-..." autocomplete="off"
+      onkeydown="if(event.key==='Enter') saveApiKey()" />
+    <button class="modal-save-btn" onclick="saveApiKey()">✓ Activer Sanovia</button>
+    <p class="modal-note">
+      Clé gratuite disponible sur <a href="https://openrouter.ai/keys" target="_blank">openrouter.ai/keys</a>
+    </p>
+  </div>
+</div>
+
+<script>
+/* ══════════════════════════════
+   NUMÉROS D'URGENCE CÔTE D'IVOIRE
+══════════════════════════════ */
+const URGENCES = [
+  { icon:"🚑", label:"SAMU / Urgences médicales", num:"185" },
+  { icon:"🔥", label:"Pompiers", num:"180" },
+  { icon:"👮", label:"Police secours", num:"111" },
+  { icon:"🏥", label:"CHU de Treichville", num:"+225 27 21 24 90 00" },
+  { icon:"🏥", label:"CHU de Cocody", num:"+225 27 22 44 08 20" },
+  { icon:"🏥", label:"CHU de Yopougon", num:"+225 27 23 46 36 36" },
+  { icon:"🏥", label:"Clinique Sainte Marie", num:"+225 27 22 44 49 00" },
+  { icon:"☎️", label:"Centre Anti-Poison", num:"+225 27 21 35 60 20" },
+  { icon:"🧠", label:"Urgences psychiatriques (CNPSY)", num:"+225 27 22 44 23 11" },
+  { icon:"🩸", label:"Centre national de transfusion sanguine", num:"+225 27 22 40 00 91" },
+  { icon:"🚨", label:"Croix-Rouge Côte d'Ivoire", num:"+225 27 22 32 31 27" },
+  { icon:"🌡️", label:"Infoline santé (COVID / maladies)", num:"143" },
+];
+
+(function buildUrgences() {
+  const track = document.getElementById('urgences-track');
+  const html = URGENCES.map(u =>
+    `<span class="urgence-chip">${u.icon} <span class="chip-label">${u.label}</span> — <a href="tel:${u.num.replace(/\s/g,'')}">${u.num}</a></span>`
+  ).join('');
+  track.innerHTML = html + html;
+})();
+
+/* ══════════════════════════════
+   SYSTEM PROMPT OPENROUTER
+══════════════════════════════ */
+const SYSTEM_PROMPT = `Tu es Sanovia, un assistant d'information santé numérique dédié aux utilisateurs en Côte d'Ivoire.
+
+══ IDENTITÉ ET LIMITES ══
+• Tu n'es PAS un médecin, pas une infirmière, pas un professionnel de santé.
+• Tu ne poses JAMAIS de diagnostic médical, même si l'utilisateur insiste.
+• Tu ne prescris JAMAIS de médicament, de dose ou de traitement spécifique.
+• Tu ne remplaces JAMAIS une consultation médicale réelle.
+• Si on te demande ton identité, tu te présentes clairement comme un assistant IA informatif, NON qualifié médicalement.
+
+══ DOMAINE AUTORISÉ — tu réponds UNIQUEMENT aux questions portant sur ══
+• Symptômes courants et maladies (information générale, sans diagnostic)
+• Prévention des maladies et hygiène de vie
+• Nutrition et alimentation santé
+• Santé mentale et bien-être psychologique
+• Maladies tropicales fréquentes en Côte d'Ivoire (paludisme, typhoïde, choléra, etc.)
+• Santé maternelle et infantile (informations générales)
+• Médicaments (usage général, effets secondaires connus — jamais de prescription)
+• Urgences médicales (orientation vers les secours)
+• Système de santé ivoirien, structures hospitalières
+
+══ HORS SUJET — tu REFUSES poliment toute question sur ══
+• Finances, actualités, politique, sports, divertissement, technologie générale, etc.
+• Si hors sujet, réponds exactement : "⚕️ Je suis Sanovia, un assistant spécialisé en santé. Je ne peux pas répondre aux questions hors du domaine médical et du bien-être. Posez-moi une question de santé, je serai ravi de vous aider !"
+
+══ URGENCES ══
+Si tu détectes un risque vital immédiat (douleur thoracique, AVC, hémorragie sévère, perte de conscience, détresse respiratoire, intoxication grave), tu indiques en PREMIER : "🚨 URGENCE — Appelez immédiatement le SAMU : 185 ou les Pompiers : 180."
+
+══ RÈGLE D'OR — FIN DE CHAQUE RÉPONSE ══
+Tu termines CHAQUE réponse (sauf hors-sujet) par ce rappel :
+"⚕️ Rappel important : Je suis un assistant informatif, pas un médecin. Ces informations ne remplacent pas un avis médical professionnel. Consultez un médecin ou rendez-vous dans un centre de santé pour toute situation personnelle."
+
+══ FORMAT ══
+• Français clair et accessible, chaleureux et rassurant sans minimiser les risques.
+• Structuré avec des sauts de ligne pour la lisibilité.
+• Longueur adaptée : concis si la question est simple, détaillé si elle est complexe.
+• Contexte ivoirien pris en compte (structures de santé locales, maladies endémiques, etc.).`;
+
+/* ══════════════════════════════
+   STATE
+══════════════════════════════ */
+const conversations = [];
+let currentConvId = null;
+let darkMode = true;
+let isLoading = false;
+
+/* ══════════════════════════════
+   API KEY
+══════════════════════════════ */
+function getApiKey() { return localStorage.getItem('sanovia_or_key') || ''; }
+
+function saveApiKey() {
+  const key = document.getElementById('api-key-input').value.trim();
+  if (!key) { alert('Veuillez entrer votre clé API.'); return; }
+  if (!key.startsWith('sk-or')) {
+    alert('Clé invalide. Elle doit commencer par "sk-or-..."');
+    return;
+  }
+  localStorage.setItem('sanovia_or_key', key);
+  document.getElementById('api-modal').style.display = 'none';
+}
+
+function logout() {
+  localStorage.removeItem('sanovia_or_key');
+  location.reload();
+}
+
+/* ══════════════════════════════
+   UTILS
+══════════════════════════════ */
+function getTime() {
+  const n = new Date();
+  return n.getHours().toString().padStart(2,'0')+':'+n.getMinutes().toString().padStart(2,'0');
+}
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+/* ══════════════════════════════
+   RENDER
+══════════════════════════════ */
+function renderConvList() {
+  const el = document.getElementById('conv-list');
+  if (!conversations.length) {
+    el.innerHTML = '<div class="no-conv">Aucune conversation</div>';
+    return;
+  }
+  el.innerHTML = conversations.map(c => `
+    <div class="conv-item ${c.id===currentConvId?'active':''}" onclick="switchConv('${c.id}')">
+      <div class="conv-title">${escHtml(c.title)}</div>
+      <div class="conv-date">Aujourd'hui</div>
+    </div>`).join('');
+}
+
+function renderMessages() {
+  const el = document.getElementById('messages');
+  const conv = conversations.find(c=>c.id===currentConvId);
+
+  if (!conv || !conv.messages.length) {
+    el.innerHTML = `
+      <div class="welcome">
+        <div class="welcome-icon">🧠</div>
+        <h2>Sanovia</h2>
+        <p>Bonjour ! Je suis votre assistant d'information santé. Je peux vous aider sur des questions de santé, de prévention et de bien-être.</p>
+        <div class="welcome-disclaimer">⚠️ Je ne suis pas un médecin. Ces informations sont à titre éducatif. Consultez toujours un professionnel de santé pour votre situation personnelle.</div>
+      </div>`;
+    return;
+  }
+
+  el.innerHTML = conv.messages.map(m => `
+    <div class="msg-row ${m.role}">
+      ${m.role==='bot'?'<div class="bot-avatar">🧠</div>':''}
+      <div>
+        <div class="bubble ${m.role}${m.hors_sujet?' hors-sujet':''}">${escHtml(m.text)}</div>
+        <div class="bubble-time">${m.time}</div>
+      </div>
+    </div>`).join('');
+  el.scrollTop = el.scrollHeight;
+}
+
+/* ══════════════════════════════
+   CONVERSATIONS
+══════════════════════════════ */
+function newConversation() {
+  const id = 'conv_'+Date.now();
+  conversations.unshift({id, title:'Nouvelle conversation', messages:[]});
+  currentConvId = id;
+  renderConvList(); renderMessages(); closeSidebar();
+}
+
+function switchConv(id) {
+  currentConvId = id;
+  renderConvList(); renderMessages(); closeSidebar();
+}
+
+/* ══════════════════════════════
+   SEND — OPENROUTER BACKEND
+══════════════════════════════ */
+async function sendMessage() {
+  if (isLoading) return;
+  const input = document.getElementById('message-input');
+  const text = input.value.trim();
+  if (!text) return;
+
+  const apiKey = getApiKey();
+  if (!apiKey) { document.getElementById('api-modal').style.display='flex'; return; }
+
+  if (!currentConvId) newConversation();
+  const conv = conversations.find(c=>c.id===currentConvId);
+
+  if (conv.title==='Nouvelle conversation') {
+    conv.title = text.substring(0,32)+(text.length>32?'…':'');
+  }
+
+  conv.messages.push({role:'user', text, time:getTime()});
+  input.value = ''; input.style.height = 'auto';
+  renderConvList(); renderMessages();
+
+  // Typing indicator
+  const msgsEl = document.getElementById('messages');
+  const typingEl = document.createElement('div');
+  typingEl.className = 'msg-row bot';
+  typingEl.id = 'typing-indicator';
+  typingEl.innerHTML = `<div class="bot-avatar">🧠</div>
+    <div class="bubble bot" style="padding:0">
+      <div class="typing-dots"><span></span><span></span><span></span></div>
+    </div>`;
+  msgsEl.appendChild(typingEl);
+  msgsEl.scrollTop = msgsEl.scrollHeight;
+
+  isLoading = true;
+  document.getElementById('send-btn').disabled = true;
+
+  // Build API history
+  const apiMsgs = conv.messages.map(m=>({
+    role: m.role==='user'?'user':'assistant',
+    content: m.text
+  }));
+
+  let reply = '';
+  let hors_sujet = false;
+
+  try {
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': window.location.href,
+        'X-Title': 'Sanovia — Assistant Santé CI'
+      },
+      body: JSON.stringify({
+        model: 'mistralai/mistral-7b-instruct:free',
+        max_tokens: 900,
+        temperature: 0.65,
+        messages: [
+          {role:'system', content: SYSTEM_PROMPT},
+          ...apiMsgs
+        ]
+      })
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(()=>({}));
+      if (res.status === 401) {
+        localStorage.removeItem('sanovia_or_key');
+        document.getElementById('api-modal').style.display = 'flex';
+        reply = "Clé API invalide ou expirée. Veuillez en saisir une nouvelle.";
+      } else {
+        reply = `Erreur (${res.status}) : ${err.error?.message || 'Réessayez dans quelques instants.'}`;
+      }
+    } else {
+      const data = await res.json();
+      reply = data.choices?.[0]?.message?.content?.trim() || "Je n'ai pas pu générer de réponse. Veuillez réessayer.";
+      // detect out-of-scope reply from model
+      if (reply.includes("Je suis Sanovia, un assistant spécialisé en santé") && reply.includes("hors du domaine")) {
+        hors_sujet = true;
+      }
+    }
+  } catch(e) {
+    reply = "Impossible de joindre le serveur. Vérifiez votre connexion internet et réessayez.";
+  }
+
+  document.getElementById('typing-indicator')?.remove();
+  conv.messages.push({role:'bot', text:reply, time:getTime(), hors_sujet});
+  isLoading = false;
+  document.getElementById('send-btn').disabled = false;
+
+  renderConvList();
+  renderMessages();
+}
+
+function handleKey(e) {
+  if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120)+'px';
+}
+
+/* ══════════════════════════════
+   SIDEBAR / THEME
+══════════════════════════════ */
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('overlay').classList.toggle('open');
+  document.getElementById('hamburger').classList.toggle('open');
+}
+function closeSidebar() {
+  ['sidebar','overlay','hamburger'].forEach(id=>document.getElementById(id).classList.remove('open'));
+}
+
+function toggleTheme() {
+  darkMode = !darkMode;
+  const r = document.documentElement.style;
+  r.setProperty('--bg-primary',     darkMode?'#0d1117':'#f5f7fa');
+  r.setProperty('--bg-secondary',   darkMode?'#161b22':'#ffffff');
+  r.setProperty('--bg-sidebar',     darkMode?'#0d1117':'#f0f2f5');
+  r.setProperty('--bg-message-bot', darkMode?'#1c2333':'#f0f2f5');
+  r.setProperty('--bg-input',       darkMode?'#161b22':'#f5f7fa');
+  r.setProperty('--text-primary',   darkMode?'#e6edf3':'#1a1a2e');
+  r.setProperty('--text-secondary', darkMode?'#8b949e':'#555');
+  r.setProperty('--border',         darkMode?'#21262d':'#d0d7de');
+  document.querySelector('.theme-btn').textContent = darkMode?'☀️':'🌙';
+}
+
+/* ══════════════════════════════
+   INIT
+══════════════════════════════ */
+window.addEventListener('DOMContentLoaded', ()=>{
+  if (!getApiKey()) {
+    document.getElementById('api-modal').style.display = 'flex';
+  }
+  renderConvList();
+  renderMessages();
+});
+</script>
+</body>
+</html>
