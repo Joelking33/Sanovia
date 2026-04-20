@@ -1,0 +1,95 @@
+// ============================================================
+// SANOovIA - Schema de base de données
+// Compatible SQLite (dev) / PostgreSQL (production)
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+  // Pour PostgreSQL en production, changer en :
+  // provider = "postgresql"
+  // url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// UTILISATEURS
+// ============================================================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String?              // null si OAuth uniquement
+  name          String
+  avatarUrl     String?
+  phone         String?
+  language      String    @default("fr") // fr, ba (baoulé), dy (dioula), bq (bété)
+  authProvider  String    @default("email") // email, google
+  googleId      String?   @unique
+  role          String    @default("user") // user, admin
+  isActive      Boolean   @default(true)
+  lastLoginAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  conversations Conversation[]
+}
+
+// ============================================================
+// CONVERSATIONS
+// ============================================================
+
+model Conversation {
+  id          String    @id @default(cuid())
+  userId      String
+  title       String    @default("Nouvelle conversation")
+  category    String    @default("general") // general, premiers_secours, grossesse
+  language    String    @default("fr") // fr, ba, dy, bq
+  isArchived  Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages Message[]
+}
+
+// ============================================================
+// MESSAGES
+// ============================================================
+
+model Message {
+  id             String   @id @default(cuid())
+  conversationId String
+  role           String   // user, assistant, system
+  content        String
+  language       String   @default("fr") // fr, ba, dy, bq
+  createdAt      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+}
+
+// ============================================================
+// CONSEILS DE SANTÉ (base de connaissances)
+// ============================================================
+
+model HealthTip {
+  id          String   @id @default(cuid())
+  category    String   // premiers_secours, grossesse
+  subcategory String?  // brûlures, coupures, saignements, trimestre1, trimestre2, etc.
+  title       String
+  content     String   // Contenu en français
+  titleBa     String?  // Traduction baoulé
+  contentBa   String?
+  titleDy     String?  // Traduction dioula
+  contentDy   String?
+  titleBq     String?  // Traduction bété
+  contentBq   String?
+  severity    String   @default("info") // info, warning, urgent, critical
+  tags        String   // Tags séparés par des virgules
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
