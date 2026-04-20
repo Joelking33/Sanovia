@@ -31,6 +31,13 @@ const LANGUAGES = [
   { code: 'bq', label: 'Bété', flag: '🌍' },
 ]
 
+const LANGUAGE_LABELS: Record<string, string> = {
+  fr: 'Français',
+  ba: 'Baoulé',
+  dy: 'Dioula',
+  bq: 'Bété'
+}
+
 // ============================================================
 // UTILS
 // ============================================================
@@ -41,6 +48,12 @@ function getTime(): string {
 
 function getInitials(name: string): string {
   return name.split(' ').map(w => w[0]).join('').toUpperCase().substring(0, 2)
+}
+
+function formatDuration(seconds: number): string {
+  const m = Math.floor(seconds / 60).toString().padStart(2, '0')
+  const s = (seconds % 60).toString().padStart(2, '0')
+  return `${m}:${s}`
 }
 
 // ============================================================
@@ -338,6 +351,421 @@ function formatDate(dateStr: string): string {
 }
 
 // ============================================================
+// VOICE RECORDING HOOK
+// ============================================================
+function useVoiceRecorder() {
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const chunksRef = useRef<Blob[]>([])
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [isRecording, setIsRecording] = useState(false)
+  const [recordingTime, setRecordingTime] = useState(0)
+  const [isTranscribing, setIsTranscribing] = useState(false)
+
+  const startRecording = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,
+          sampleRate: 16000,
+          echoCancellation: true,
+          noiseSuppression: true,
+        }
+      })
+
+      // Try to use webm first, fallback to mp4, then default
+      let mimeType = 'audio/webm;codecs=opus'
+      if (!MediaRecorder.isTypeSupported(mimeType)) {
+        mimeType = 'audio/mp4'
+        if (!MediaRecorder.isTypeSupported(mimeType)) {
+          mimeType = ''
+        }
+      }
+
+      const options: MediaRecorderOptions = mimeType ? { mimeType } : {}
+      const mediaRecorder = new MediaRecorder(stream, options)
+      chunksRef.current = []
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data)
+      }
+
+      mediaRecorder.onstop = () => {
+        stream.getTracks().forEach(t => t.stop())
+      }
+
+      mediaRecorderRef.current = mediaRecorder
+      mediaRecorder.start(250) // Collect data every 250ms
+      setIsRecording(true)
+      setRecordingTime(0)
+
+      timerRef.current = setInterval(() => {
+        setRecordingTime(prev => prev + 1)
+      }, 1000)
+    } catch (err: any) {
+      console.error('Microphone access error:', err)
+      alert('Impossible d\'accéder au microphone. Vérifiez les permissions de votre navigateur.')
+    }
+  }, [])
+
+  const stopRecording = useCallback((): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      const recorder = mediaRecorderRef.current
+      if (!recorder || recorder.state === 'inactive') {
+        reject(new Error('Aucun enregistrement en cours'))
+        return
+      }
+
+      recorder.onstop = () => {
+        const stream = recorder.stream
+        stream.getTracks().forEach(t => t.stop())
+
+        // Get MIME type from recorder
+        const recordedMime = recorder.mimeType || 'audio/webm'
+        let ext = 'webm'
+        if (recordedMime.includes('mp4')) ext = 'mp4'
+        else if (recordedMime.includes('ogg')) ext = 'ogg'
+        else if (recordedMime.includes('wav')) ext = 'wav'
+
+        const blob = new Blob(chunksRef.current, { type: recordedMime })
+        chunksRef.current = []
+        setIsRecording(false)
+        setRecordingTime(0)
+
+        if (timerRef.current) {
+          clearInterval(timerRef.current)
+          timerRef.current = null
+        }
+
+        // Attach extension for reference
+        ;(blob as any).ext = ext
+        resolve(blob)
+      }
+
+      recorder.stop()
+
+      if (timerRef.current) {
+        clearInterval(timerRef.current)
+        timerRef.current = null
+      }
+    })
+  }, [])
+
+  const cancelRecording = useCallback(() => {
+    const recorder = mediaRecorderRef.current
+    if (recorder && recorder.state !== 'inactive') {
+      chunksRef.current = []
+      const stream = recorder.stream
+      recorder.onstop = () => {
+        stream.getTracks().forEach(t => t.stop())
+      }
+      recorder.stop()
+    }
+    setIsRecording(false)
+    setRecordingTime(0)
+    if (timerRef.current) {
+      clearInterval(timerRef.current)
+      timerRef.current = null
+    }
+  }, [])
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current)
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stream.getTracks().forEach(t => t.stop())
+      }
+    }
+  }, [])
+
+  return {
+    isRecording,
+    recordingTime,
+    isTranscribing,
+    setIsTranscribing,
+    startRecording,
+    stopRecording,
+    cancelRecording
+  }
+}
+
+// ============================================================
+// VOICE MESSAGE PLAYER COMPONENT
+// ============================================================
+function VoiceMessagePlayer({ audioBase64, format = 'mp3', role, language }: {
+  audioBase64: string
+  format: string
+  role: 'user' | 'assistant'
+  language: string
+}) {
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [progress, setProgress] = useState(0)
+  const [duration, setDuration] = useState(0)
+  const [isLoading, setIsLoading] = useState(true)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const animFrameRef = useRef<number>(0)
+
+  useEffect(() => {
+    if (!audioBase64) return
+
+    const mimeType = format === 'wav' ? 'audio/wav' : format === 'mp3' ? 'audio/mpeg' : 'audio/webm'
+    const byteChars = atob(audioBase64)
+    const byteNumbers = new Array(byteChars.length)
+    for (let i = 0; i < byteChars.length; i++) {
+      byteNumbers[i] = byteChars.charCodeAt(i)
+    }
+    const byteArray = new Uint8Array(byteNumbers)
+    const blob = new Blob([byteArray], { type: mimeType })
+    const url = URL.createObjectURL(blob)
+
+    const audio = new Audio(url)
+    audioRef.current = audio
+
+    audio.addEventListener('loadedmetadata', () => {
+      setDuration(audio.duration)
+      setIsLoading(false)
+    })
+
+    audio.addEventListener('ended', () => {
+      setIsPlaying(false)
+      setProgress(0)
+      cancelAnimationFrame(animFrameRef.current)
+    })
+
+    audio.addEventListener('error', () => {
+      setIsLoading(false)
+      console.error('Audio playback error')
+    })
+
+    return () => {
+      URL.revokeObjectURL(url)
+      audio.pause()
+      cancelAnimationFrame(animFrameRef.current)
+    }
+  }, [audioBase64, format])
+
+  const togglePlay = () => {
+    const audio = audioRef.current
+    if (!audio) return
+
+    if (isPlaying) {
+      audio.pause()
+      setIsPlaying(false)
+      cancelAnimationFrame(animFrameRef.current)
+    } else {
+      audio.play().then(() => {
+        setIsPlaying(true)
+        const updateProgress = () => {
+          if (audio.duration) {
+            setProgress((audio.currentTime / audio.duration) * 100)
+          }
+          animFrameRef.current = requestAnimationFrame(updateProgress)
+        }
+        updateProgress()
+      }).catch(err => {
+        console.error('Playback failed:', err)
+        setIsPlaying(false)
+      })
+    }
+  }
+
+  const color = role === 'user' ? '#fff' : '#00c6a7'
+  const bgColor = role === 'user' ? 'rgba(255,255,255,.2)' : 'rgba(0,198,167,.15)'
+
+  // Waveform bars (simulated)
+  const bars = Array.from({ length: 24 }, (_, i) => {
+    const h = 6 + Math.sin(i * 0.8) * 4 + Math.cos(i * 1.3) * 3
+    return h
+  })
+
+  return (
+    <div className="flex items-center gap-2.5 min-w-[200px]">
+      {/* Play button */}
+      <button
+        onClick={togglePlay}
+        disabled={isLoading}
+        className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 cursor-pointer transition-all hover:scale-105 disabled:opacity-40"
+        style={{ background: bgColor, border: `1px solid ${color}40` }}>
+        {isLoading ? (
+          <div className="w-3 h-3 border-2 rounded-full animate-spin" style={{ borderColor: `${color}40`, borderTopColor: color }} />
+        ) : isPlaying ? (
+          <div className="flex gap-[2px] items-end h-3">
+            <div className="w-[3px] rounded-full" style={{ background: color, height: '6px' }} />
+            <div className="w-[3px] rounded-full" style={{ background: color, height: '12px' }} />
+          </div>
+        ) : (
+          <svg width="10" height="12" viewBox="0 0 10 12" fill="none">
+            <path d="M0 0H3V12H0V0ZM4 0H10V12H4V0Z" fill={color} />
+          </svg>
+        )}
+      </button>
+
+      {/* Waveform */}
+      <div className="flex-1 flex items-center gap-[2px] h-6">
+        {bars.map((h, i) => {
+          const isActive = progress > (i / bars.length) * 100
+          return (
+            <div
+              key={i}
+              className="flex-1 rounded-full transition-all duration-150"
+              style={{
+                height: `${h}px`,
+                background: isActive ? color : `${color}30`,
+                minWidth: '2px'
+              }}
+            />
+          )
+        })}
+      </div>
+
+      {/* Duration */}
+      <span className="text-[11px] flex-shrink-0 w-10 text-right" style={{ color: role === 'user' ? 'rgba(255,255,255,.7)' : '#8b949e' }}>
+        {isLoading ? '--:--' : `${formatDuration(duration || 0)}`}
+      </span>
+
+      {/* Language badge */}
+      <span className="text-[9px] px-1.5 py-0.5 rounded font-medium flex-shrink-0"
+        style={{ background: bgColor, color, border: `1px solid ${color}30` }}>
+        {LANGUAGE_LABELS[language] || 'FR'}
+      </span>
+    </div>
+  )
+}
+
+// ============================================================
+// TTS PLAY BUTTON (for bot messages)
+// ============================================================
+function TTSPlayButton({ text, language }: { text: string; language: string }) {
+  const [isLoading, setIsLoading] = useState(false)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [audioBase64, setAudioBase64] = useState<string | null>(null)
+  const [format, setFormat] = useState('mp3')
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+
+  const handlePlay = async () => {
+    // If already loaded, toggle play
+    if (audioBase64 && audioRef.current) {
+      if (isPlaying) {
+        audioRef.current.pause()
+        setIsPlaying(false)
+      } else {
+        audioRef.current.play()
+        setIsPlaying(true)
+      }
+      return
+    }
+
+    setIsLoading(true)
+    try {
+      const token = localStorage.getItem('sanoovia_token')
+      if (!token) return
+
+      const res = await fetch('/api/voice/synthesize', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ text, language })
+      })
+      const data = await res.json()
+      if (data.success) {
+        setAudioBase64(data.data.audio)
+        setFormat(data.data.format || 'mp3')
+
+        // Play immediately
+        const mimeType = data.data.format === 'wav' ? 'audio/wav' : 'audio/mpeg'
+        const byteChars = atob(data.data.audio)
+        const byteNumbers = new Array(byteChars.length)
+        for (let i = 0; i < byteChars.length; i++) {
+          byteNumbers[i] = byteChars.charCodeAt(i)
+        }
+        const byteArray = new Uint8Array(byteNumbers)
+        const blob = new Blob([byteArray], { type: mimeType })
+        const url = URL.createObjectURL(blob)
+
+        const audio = new Audio(url)
+        audioRef.current = audio
+        audio.play()
+        setIsPlaying(true)
+        audio.onended = () => setIsPlaying(false)
+        audio.onerror = () => {
+          setIsPlaying(false)
+          console.error('TTS playback error')
+        }
+      }
+    } catch (err) {
+      console.error('TTS generation error:', err)
+    }
+    setIsLoading(false)
+  }
+
+  const handleStop = () => {
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current.currentTime = 0
+    }
+    setIsPlaying(false)
+  }
+
+  return (
+    <>
+      {!audioBase64 ? (
+        <button
+          onClick={handlePlay}
+          disabled={isLoading}
+          className="mt-1.5 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium cursor-pointer transition-all hover:opacity-80 disabled:opacity-40"
+          style={{ background: 'rgba(0,198,167,.1)', border: '1px solid rgba(0,198,167,.25)', color: '#00c6a7' }}
+          title="Écouter la réponse vocale">
+          {isLoading ? (
+            <>
+              <div className="w-3 h-3 border-[1.5px] rounded-full animate-spin" style={{ borderColor: 'rgba(0,198,167,.3)', borderTopColor: '#00c6a7' }} />
+              Génération...
+            </>
+          ) : (
+            <>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" opacity="0.3" />
+                <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+              </svg>
+              Écouter en {LANGUAGE_LABELS[language] || 'Français'}
+            </>
+          )}
+        </button>
+      ) : (
+        <button
+          onClick={isPlaying ? handleStop : handlePlay}
+          className="mt-1.5 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium cursor-pointer transition-all"
+          style={{
+            background: isPlaying ? 'rgba(0,198,167,.2)' : 'rgba(0,198,167,.1)',
+            border: isPlaying ? '1px solid rgba(0,198,167,.4)' : '1px solid rgba(0,198,167,.25)',
+            color: '#00c6a7'
+          }}
+          title={isPlaying ? 'Arrêter' : 'Écouter'}>
+          {isPlaying ? (
+            <>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                <rect x="6" y="4" width="4" height="16" rx="1" />
+                <rect x="14" y="4" width="4" height="16" rx="1" />
+              </svg>
+              Arrêter
+            </>
+          ) : (
+            <>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" opacity="0.6">
+                <polygon points="5 3 19 12 5 21 5 3" />
+              </svg>
+              Rejouer
+            </>
+          )}
+        </button>
+      )}
+    </>
+  )
+}
+
+// ============================================================
 // CHAT VIEW
 // ============================================================
 function ChatView() {
@@ -349,6 +777,21 @@ function ChatView() {
   const [category, setCategory] = useState<string>('general')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+
+  // Voice recording
+  const {
+    isRecording,
+    recordingTime,
+    isTranscribing,
+    setIsTranscribing,
+    startRecording,
+    stopRecording,
+    cancelRecording
+  } = useVoiceRecorder()
+
+  // Track voice messages for display: { messageId: { audioBase64, format } }
+  const [voiceMessages, setVoiceMessages] = useState<Record<string, { audio: string; format: string }>>({})
+  const [transcriptionError, setTranscriptionError] = useState('')
 
   // Fetch conversations on mount
   useEffect(() => {
@@ -367,24 +810,28 @@ function ChatView() {
     document.documentElement.classList.toggle('light')
   }
 
-  // New conversation — clear current to show welcome
+  // New conversation
   const handleNewConv = async () => {
     clearCurrent()
     setCategory('general')
     setInputValue('')
+    setVoiceMessages({})
+    setTranscriptionError('')
     closeSidebar()
     inputRef.current?.focus()
   }
 
-  // Send message
+  // Send text message
   const handleSend = async () => {
     const text = inputValue.trim()
     if (!text || isSendingMessage) return
+    setTranscriptionError('')
 
     if (!currentConversation) {
       const conv = await createConversation(text.substring(0, 60) + (text.length > 60 ? '...' : ''), category)
       if (conv) {
         setInputValue('')
+        if (inputRef.current) inputRef.current.style.height = 'auto'
         useChatStore.getState().sendMessage(text)
       }
       return
@@ -393,6 +840,109 @@ function ChatView() {
     setInputValue('')
     if (inputRef.current) inputRef.current.style.height = 'auto'
     await sendMessage(text)
+  }
+
+  // Handle voice recording completion
+  const handleVoiceRecorded = async () => {
+    try {
+      const audioBlob = await stopRecording()
+      if (audioBlob.size < 1000) {
+        setTranscriptionError('Enregistrement trop court. Parlez plus longtemps.')
+        return
+      }
+
+      setIsTranscribing(true)
+      setTranscriptionError('')
+
+      // Convert blob to base64
+      const reader = new FileReader()
+      reader.readAsDataURL(audioBlob)
+      reader.onloadend = async () => {
+        const base64Data = (reader.result as string).split(',')[1] // Remove data:audio/...;base64, prefix
+
+        const token = localStorage.getItem('sanoovia_token')
+        if (!token) {
+          setIsTranscribing(false)
+          setTranscriptionError('Session expirée. Veuillez vous reconnecter.')
+          return
+        }
+
+        try {
+          const res = await fetch('/api/voice/transcribe', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              audio: base64Data,
+              language: user?.language || 'fr'
+            })
+          })
+          const data = await res.json()
+
+          if (data.success && data.data.text) {
+            const transcribedText = data.data.text
+
+            // Store voice audio for the user message
+            const tempId = 'voice_' + Date.now()
+            setVoiceMessages(prev => ({
+              ...prev,
+              [tempId]: { audio: base64Data, format: audioBlob.ext || 'webm' }
+            }))
+
+            // Send as text message
+            if (!currentConversation) {
+              const conv = await createConversation(
+                transcribedText.substring(0, 60) + (transcribedText.length > 60 ? '...' : ''),
+                category
+              )
+              if (conv) {
+                await useChatStore.getState().sendMessage(transcribedText)
+                // Map the real message ID to the voice
+                const msgs = useChatStore.getState().currentConversation?.messages
+                if (msgs && msgs.length > 0) {
+                  const lastUserMsg = [...msgs].reverse().find(m => m.role === 'user')
+                  if (lastUserMsg) {
+                    setVoiceMessages(prev => {
+                      const next = { ...prev }
+                      next[lastUserMsg.id] = next[tempId]
+                      delete next[tempId]
+                      return next
+                    })
+                  }
+                }
+              }
+            } else {
+              await sendMessage(transcribedText)
+              // Map the real message ID to the voice
+              const msgs = useChatStore.getState().currentConversation?.messages
+              if (msgs && msgs.length > 0) {
+                const lastUserMsg = [...msgs].reverse().find(m => m.role === 'user')
+                if (lastUserMsg) {
+                  setVoiceMessages(prev => {
+                    const next = { ...prev }
+                    next[lastUserMsg.id] = next[tempId]
+                    delete next[tempId]
+                    return next
+                  })
+                }
+              }
+            }
+          } else {
+            setTranscriptionError(data.data?.message || 'Aucune parole détectée. Veuillez réessayer.')
+          }
+        } catch (err) {
+          console.error('Transcription error:', err)
+          setTranscriptionError('Erreur lors de la transcription. Vérifiez votre connexion.')
+        }
+
+        setIsTranscribing(false)
+      }
+    } catch (err) {
+      console.error('Recording error:', err)
+      setIsTranscribing(false)
+    }
   }
 
   // Keyboard handler
@@ -585,7 +1135,7 @@ function ChatView() {
                 const isActive = currentConversation?.id === conv.id
                 return (
                   <div key={conv.id}
-                    onClick={() => { selectConversation(conv.id); closeSidebar() }}
+                    onClick={() => { selectConversation(conv.id); closeSidebar(); setVoiceMessages({}) }}
                     className={`px-3 py-2.5 rounded-xl cursor-pointer transition-all group relative ${isActive ? 'ring-1' : ''}`}
                     style={{
                       background: isActive ? `${catCfg.color}15` : 'rgba(255,255,255,.04)',
@@ -657,6 +1207,14 @@ function ChatView() {
                   Bonjour {user?.name?.split(' ')[0]} ! Je suis votre assistant d&apos;information santé.
                   Je peux vous aider sur des questions de santé, de prévention et de bien-être.
                 </p>
+
+                {/* Voice feature hint */}
+                <div className="px-4 py-2.5 rounded-xl text-xs leading-relaxed max-w-[400px]"
+                  style={{ background: 'rgba(0,198,167,.08)', border: '1px solid rgba(0,198,167,.25)', color: '#00c6a7' }}>
+                  🎤 Vous pouvez aussi m&apos;envoyer des messages vocaux ! Cliquez sur le micro pour enregistrer.
+                  J&apos;écouterai en {LANGUAGE_LABELS[user?.language || 'fr']} et vous répondrai également à voix.
+                </div>
+
                 <div className="px-4 py-2.5 rounded-xl text-xs leading-relaxed max-w-[400px]"
                   style={{ background: 'rgba(234,179,8,.08)', border: '1px solid rgba(234,179,8,.25)', color: '#fbbf24' }}>
                   ⚠️ Je ne suis pas un médecin. Ces informations sont à titre éducatif.
@@ -680,31 +1238,64 @@ function ChatView() {
               </div>
             ) : (
               /* MESSAGE LIST */
-              currentConversation.messages.map(msg => (
-                <div key={msg.id} className={`flex gap-2.5 items-end ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
-                  {msg.role === 'assistant' && (
-                    <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-base"
-                      style={{ background: 'linear-gradient(135deg,rgba(0,198,167,.3),rgba(0,168,232,.3))', border: '1px solid rgba(0,198,167,.4)' }}>
-                      🧠
-                    </div>
-                  )}
-                  <div className={msg.role === 'user' ? 'text-right' : ''}>
-                    <div className="max-w-[65%] max-[768px]:max-w-[82%] px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap"
-                      style={msg.role === 'user'
-                        ? { background: 'linear-gradient(135deg, #00c6a7, #00a8e8)', color: '#fff', borderBottomRightRadius: '4px' }
-                        : { background: 'var(--card)', border: '1px solid var(--border)', borderBottomLeftRadius: '4px', color: 'var(--foreground)' }
-                      }>
-                      {msg.content}
-                    </div>
-                    <div className="text-[11px] mt-1" style={{ color: '#8b949e' }}>
-                      {new Date(msg.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+              currentConversation.messages.map(msg => {
+                const voiceData = voiceMessages[msg.id]
+                const isVoiceMessage = !!voiceData
+
+                return (
+                  <div key={msg.id} className={`flex gap-2.5 items-end ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                    {msg.role === 'assistant' && (
+                      <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-base"
+                        style={{ background: 'linear-gradient(135deg,rgba(0,198,167,.3),rgba(0,168,232,.3))', border: '1px solid rgba(0,198,167,.4)' }}>
+                        🧠
+                      </div>
+                    )}
+                    <div className={msg.role === 'user' ? 'text-right' : ''}>
+                      <div className="max-w-[65%] max-[768px]:max-w-[82%] px-4 py-3 rounded-2xl text-sm leading-relaxed"
+                        style={msg.role === 'user'
+                          ? { background: 'linear-gradient(135deg, #00c6a7, #00a8e8)', color: '#fff', borderBottomRightRadius: '4px' }
+                          : { background: 'var(--card)', border: '1px solid var(--border)', borderBottomLeftRadius: '4px', color: 'var(--foreground)' }
+                        }>
+                        {/* Voice message player for user messages */}
+                        {isVoiceMessage ? (
+                          <>
+                            <VoiceMessagePlayer
+                              audioBase64={voiceData.audio}
+                              format={voiceData.format}
+                              role="user"
+                              language={msg.language}
+                            />
+                            {/* Show transcription below the audio player */}
+                            <div className="mt-2 pt-2 text-xs opacity-80 whitespace-pre-wrap"
+                              style={{ borderTop: '1px solid rgba(255,255,255,.15)' }}>
+                              {msg.content}
+                            </div>
+                          </>
+                        ) : (
+                          <div className="whitespace-pre-wrap">{msg.content}</div>
+                        )}
+                      </div>
+
+                      {/* TTS button for assistant messages */}
+                      {msg.role === 'assistant' && (
+                        <TTSPlayButton text={msg.content} language={msg.language} />
+                      )}
+
+                      <div className="text-[11px] mt-1 flex items-center gap-1.5" style={{ color: '#8b949e' }}>
+                        {new Date(msg.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                        {/* Language badge */}
+                        <span className="text-[9px] px-1 py-0.5 rounded"
+                          style={{ background: 'rgba(255,255,255,.06)', color: '#484f58' }}>
+                          {LANGUAGE_LABELS[msg.language] || 'FR'}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))
+                )
+              })
             )}
 
-            {/* Typing indicator */}
+            {/* Typing / Transcribing indicator */}
             {isSendingMessage && (
               <div className="flex gap-2.5 items-end">
                 <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-base"
@@ -724,8 +1315,97 @@ function ChatView() {
             <div ref={messagesEndRef} />
           </div>
 
+          {/* Transcription error */}
+          {transcriptionError && (
+            <div className="px-4 pb-1">
+              <div className="flex items-center justify-between px-3 py-2 rounded-lg text-xs"
+                style={{ background: 'rgba(239,68,68,.08)', border: '1px solid rgba(239,68,68,.2)', color: '#fca5a5' }}>
+                <span>{transcriptionError}</span>
+                <button onClick={() => setTranscriptionError('')} className="cursor-pointer ml-2 opacity-60 hover:opacity-100">✕</button>
+              </div>
+            </div>
+          )}
+
           {/* INPUT AREA */}
           <div className="p-3.5 max-[768px]:p-2.5" style={{ background: 'var(--card)', borderTop: '1px solid var(--border)' }}>
+            {/* Recording overlay */}
+            {isRecording && (
+              <div className="mb-2.5 mx-1 p-3 rounded-xl flex items-center gap-3"
+                style={{ background: 'rgba(239,68,68,.08)', border: '1px solid rgba(239,68,68,.25)' }}>
+                {/* Animated recording indicator */}
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <div className="recording-pulse-wrapper">
+                    <div className="w-3 h-3 rounded-full bg-[#ef4444] recording-pulse" />
+                  </div>
+                  <span className="text-xs font-semibold text-[#fca5a5]">ENREGISTREMENT</span>
+                </div>
+
+                {/* Live timer */}
+                <div className="flex-1 flex items-center justify-center">
+                  <span className="text-lg font-mono font-bold tracking-wider" style={{ color: '#fca5a5' }}>
+                    {formatDuration(recordingTime)}
+                  </span>
+                </div>
+
+                {/* Live waveform visualization */}
+                <div className="flex items-center gap-[3px] h-6">
+                  {Array.from({ length: 12 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="w-[3px] rounded-full recording-bar"
+                      style={{
+                        animationDelay: `${i * 0.08}s`,
+                        background: '#ef4444'
+                      }}
+                    />
+                  ))}
+                </div>
+
+                {/* Cancel and Send buttons */}
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <button
+                    onClick={cancelRecording}
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-all"
+                    style={{ background: 'rgba(255,255,255,.06)', border: '1px solid var(--border)', color: '#8b949e' }}
+                    title="Annuler l'enregistrement">
+                    Annuler
+                  </button>
+                  <button
+                    onClick={handleVoiceRecorded}
+                    disabled={recordingTime < 1}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all disabled:opacity-30 hover:opacity-90"
+                    style={{ background: 'linear-gradient(135deg, #00c6a7, #00a8e8)', color: '#fff' }}
+                    title="Envoyer le message vocal">
+                    Envoyer
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Transcribing indicator */}
+            {isTranscribing && (
+              <div className="mb-2.5 mx-1 p-3 rounded-xl flex items-center gap-3"
+                style={{ background: 'rgba(0,198,167,.08)', border: '1px solid rgba(0,198,167,.25)' }}>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 border-2 rounded-full animate-spin" style={{ borderColor: 'rgba(0,198,167,.3)', borderTopColor: '#00c6a7' }} />
+                  <span className="text-xs font-medium" style={{ color: '#00c6a7' }}>
+                    Transcription en cours en {LANGUAGE_LABELS[user?.language || 'fr']}...
+                  </span>
+                </div>
+                <div className="flex-1" />
+                <div className="flex gap-[2px] h-4 items-center">
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <div key={i} className="w-[2px] rounded-full animate-pulse"
+                      style={{
+                        height: `${8 + Math.sin(i * 1.2) * 6}px`,
+                        background: '#00c6a7',
+                        animationDelay: `${i * 0.15}s`
+                      }} />
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="flex items-end gap-2.5 px-3 py-2 rounded-xl transition-colors"
               style={{ background: 'var(--background)', border: '1px solid var(--border)' }}
               onFocus={e => e.currentTarget.style.borderColor = '#00c6a7'}
@@ -741,16 +1421,42 @@ function ChatView() {
                 style={{ color: 'var(--foreground)' }}
               />
               <div className="flex gap-1.5 items-center flex-shrink-0">
-                <button className="w-9 h-9 rounded-full bg-transparent cursor-pointer text-lg transition-colors hover:bg-[rgba(0,198,167,.1)]"
-                  style={{ color: '#8b949e' }}>
-                  🎤
-                </button>
-                <button onClick={handleSend} disabled={isSendingMessage || !inputValue.trim()}
+                {/* Microphone button */}
+                {!isRecording && !isTranscribing && (
+                  <button
+                    onClick={startRecording}
+                    disabled={isSendingMessage}
+                    className="w-9 h-9 rounded-full bg-transparent cursor-pointer transition-all hover:bg-[rgba(0,198,167,.1)] disabled:opacity-35 disabled:cursor-not-allowed group relative"
+                    style={{ color: isSendingMessage ? '#484f58' : '#00c6a7' }}
+                    title="Enregistrer un message vocal">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                      className="group-hover:scale-110 transition-transform">
+                      <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+                      <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                      <line x1="12" y1="19" x2="12" y2="22" />
+                    </svg>
+                    {/* Language hint tooltip */}
+                    <span className="absolute -top-7 left-1/2 -translate-x-1/2 text-[9px] px-1.5 py-0.5 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
+                      style={{ background: 'var(--card)', border: '1px solid var(--border)', color: '#8b949e' }}>
+                      🎤 {LANGUAGE_LABELS[user?.language || 'fr']}
+                    </span>
+                  </button>
+                )}
+                <button onClick={handleSend} disabled={isSendingMessage || !inputValue.trim() || isRecording || isTranscribing}
                   className="w-9 h-9 rounded-full cursor-pointer flex items-center justify-center text-base transition-all disabled:opacity-35 disabled:cursor-not-allowed hover:opacity-90 active:scale-95"
                   style={{ background: 'linear-gradient(135deg, #00c6a7, #00a8e8)', color: '#fff' }}>
                   ➤
                 </button>
               </div>
+            </div>
+
+            {/* Voice hint bar */}
+            <div className="flex items-center justify-center gap-1.5 mt-2 text-[10px]" style={{ color: '#484f58' }}>
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+              </svg>
+              <span>Langue vocale : <strong>{LANGUAGE_LABELS[user?.language || 'fr']}</strong> — Changez la langue dans le sélecteur en haut</span>
             </div>
           </div>
         </div>
