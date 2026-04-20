@@ -317,6 +317,27 @@ function RegisterView() {
 }
 
 // ============================================================
+// CATEGORY CONFIG
+// ============================================================
+const CATEGORY_CONFIG: Record<string, { icon: string; label: string; color: string }> = {
+  general: { icon: '💬', label: 'Santé', color: '#00c6a7' },
+  premiers_secours: { icon: '🚑', label: 'Urgences', color: '#ef4444' },
+  grossesse: { icon: '🤰', label: 'Grossesse', color: '#a78bfa' },
+}
+
+function formatDate(dateStr: string): string {
+  const d = new Date(dateStr)
+  const now = new Date()
+  const diffMs = now.getTime() - d.getTime()
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+
+  if (diffDays === 0) return "Aujourd'hui"
+  if (diffDays === 1) return 'Hier'
+  if (diffDays < 7) return `Il y a ${diffDays} jours`
+  return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
+}
+
+// ============================================================
 // CHAT VIEW
 // ============================================================
 function ChatView() {
@@ -337,7 +358,7 @@ function ChatView() {
   // Scroll to bottom on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [currentConversation?.messages])
+  }, [currentConversation?.messages?.length])
 
   // Theme toggle
   const toggleTheme = () => {
@@ -346,10 +367,11 @@ function ChatView() {
     document.documentElement.classList.toggle('light')
   }
 
-  // New conversation
+  // New conversation — clear current to show welcome
   const handleNewConv = async () => {
+    clearCurrent()
     setCategory('general')
-    await createConversation()
+    setInputValue('')
     closeSidebar()
     inputRef.current?.focus()
   }
@@ -359,19 +381,17 @@ function ChatView() {
     const text = inputValue.trim()
     if (!text || isSendingMessage) return
 
-    // If no conversation, create one
     if (!currentConversation) {
       const conv = await createConversation(text.substring(0, 60) + (text.length > 60 ? '...' : ''), category)
       if (conv) {
         setInputValue('')
-        // Send the message to the new conversation
         useChatStore.getState().sendMessage(text)
       }
       return
     }
 
     setInputValue('')
-    inputRef.current!.style.height = 'auto'
+    if (inputRef.current) inputRef.current.style.height = 'auto'
     await sendMessage(text)
   }
 
@@ -389,18 +409,12 @@ function ChatView() {
     el.style.height = Math.min(el.scrollHeight, 120) + 'px'
   }
 
-  // Sidebar close
-  const closeSidebar = () => {
-    setSidebarOpen(false)
-  }
+  const closeSidebar = () => setSidebarOpen(false)
 
-  // Change language
   const handleChangeLanguage = async (langCode: string) => {
-    const { updateLanguage } = useAuthStore.getState()
-    await updateLanguage(langCode)
+    await useAuthStore.getState().updateLanguage(langCode)
   }
 
-  // Delete conversation handler
   const handleDeleteConv = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation()
     await deleteConversation(id)
@@ -436,7 +450,8 @@ function ChatView() {
         style={{ background: 'var(--card)', borderBottom: '1px solid var(--border)' }}>
         <div className="flex items-center gap-2.5">
           {/* Hamburger mobile */}
-          <button onClick={() => setSidebarOpen(!sidebarOpen)} className="hidden max-[768px]:flex flex-col gap-[5px] p-1.5 rounded-md transition-colors hover:bg-white/10 cursor-pointer">
+          <button onClick={() => setSidebarOpen(!sidebarOpen)} className="flex flex-col gap-[5px] p-1.5 rounded-md transition-colors hover:bg-white/10 cursor-pointer"
+            style={{ display: undefined }}>
             <span className={`block w-5 h-[2px] rounded-sm transition-all ${sidebarOpen ? 'translate-y-[7px] rotate-45' : ''}`} style={{ background: 'var(--foreground)' }} />
             <span className={`block w-5 h-[2px] rounded-sm transition-all ${sidebarOpen ? 'opacity-0' : ''}`} style={{ background: 'var(--foreground)' }} />
             <span className={`block w-5 h-[2px] rounded-sm transition-all ${sidebarOpen ? '-translate-y-[7px] -rotate-45' : ''}`} style={{ background: 'var(--foreground)' }} />
@@ -449,6 +464,22 @@ function ChatView() {
             </div>
             <span className="text-base font-bold sanovia-gradient-text">Sanovia</span>
           </div>
+          {/* Conversation title in topbar */}
+          {currentConversation && (
+            <div className="hidden md:flex items-center gap-2 ml-4">
+              <span className="text-xs" style={{ color: '#8b949e' }}>│</span>
+              <span className="text-sm font-medium truncate max-w-[200px]" style={{ color: 'var(--foreground)' }}>
+                {currentConversation.title}
+              </span>
+              <span className="text-xs px-1.5 py-0.5 rounded" style={{
+                background: `${CATEGORY_CONFIG[currentConversation.category]?.color}20`,
+                color: CATEGORY_CONFIG[currentConversation.category]?.color,
+                fontSize: '10px'
+              }}>
+                {CATEGORY_CONFIG[currentConversation.category]?.icon} {CATEGORY_CONFIG[currentConversation.category]?.label}
+              </span>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-2.5">
@@ -468,19 +499,16 @@ function ChatView() {
             </select>
           </div>
 
-          {/* Theme toggle */}
           <button onClick={toggleTheme} className="w-[34px] h-[34px] rounded-lg flex items-center justify-center text-base cursor-pointer transition-colors hover:bg-white/10"
             style={{ border: '1px solid var(--border)', background: 'rgba(255,255,255,.06)' }}>
             {darkMode ? '☀️' : '🌙'}
           </button>
 
-          {/* Disconnect */}
-          <button onClick={logout} className="hidden max-[768px]:none text-[13px] px-3 py-1.5 rounded-lg cursor-pointer transition-colors hover:bg-white/10"
+          <button onClick={logout} className="text-[13px] px-3 py-1.5 rounded-lg cursor-pointer transition-colors hover:bg-white/10"
             style={{ border: '1px solid var(--border)', color: 'var(--foreground)' }}>
             Se déconnecter
           </button>
 
-          {/* Avatar */}
           <div className="w-[34px] h-[34px] rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
             style={{ background: 'linear-gradient(135deg, #00c6a7, #00a8e8)' }}>
             {user ? getInitials(user.name) : '?'}
@@ -492,70 +520,109 @@ function ChatView() {
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar overlay (mobile) */}
         {sidebarOpen && (
-          <div className="fixed inset-0 bg-black/50 z-[90] hidden max-[768px]:block" onClick={closeSidebar} />
+          <div className="fixed inset-0 bg-black/50 z-[90] md:hidden" onClick={closeSidebar} />
         )}
 
-        {/* SIDEBAR */}
-        <div className={`w-[280px] flex-shrink-0 flex flex-col p-4 gap-3 transition-transform duration-300 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} max-[768px]:fixed max-[768px]:top-[90px] max-[768px]:bottom-0 max-[768px]:z-[95] max-[768px]:w-[260px]`}
+        {/* SIDEBAR — visible on desktop, slide on mobile */}
+        <div className={`
+          flex-shrink-0 flex flex-col gap-0 transition-transform duration-300
+          w-[280px] p-4
+          fixed top-[90px] bottom-0 left-0 z-[95] w-[260px]
+          ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+          md:translate-x-0 md:static md:top-auto md:bottom-auto md:z-auto md:w-[280px]
+        `}
           style={{ background: 'var(--background)', borderRight: '1px solid var(--border)' }}>
 
-          {/* Category selector */}
-          <div className="flex gap-1.5 p-1 rounded-lg" style={{ background: 'var(--card)' }}>
-            {[
-              { key: 'general', label: '💬 Santé', val: 'general' },
-              { key: 'premiers_secours', label: '🚑 Urgences', val: 'premiers_secours' },
-              { key: 'grossesse', label: '🤰 Grossesse', val: 'grossesse' },
-            ].map(cat => (
-              <button key={cat.key} onClick={() => setCategory(cat.val)}
-                className="flex-1 text-center text-xs py-1.5 rounded-md font-medium transition-all cursor-pointer"
-                style={{
-                  background: category === cat.val ? 'rgba(0,198,167,.15)' : 'transparent',
-                  color: category === cat.val ? '#00c6a7' : '#8b949e',
-                  border: category === cat.val ? '1px solid rgba(0,198,167,.3)' : '1px solid transparent'
-                }}>
-                {cat.label}
-              </button>
-            ))}
+          {/* ── NEW CHAT SECTION ── */}
+          <div className="mb-3">
+            {/* Category selector */}
+            <div className="flex gap-1 p-1 rounded-lg mb-3" style={{ background: 'var(--card)' }}>
+              {Object.entries(CATEGORY_CONFIG).map(([key, cfg]) => (
+                <button key={key} onClick={() => setCategory(key)}
+                  className="flex-1 text-center text-[11px] py-1.5 rounded-md font-medium transition-all cursor-pointer leading-tight"
+                  style={{
+                    background: category === key ? `${cfg.color}20` : 'transparent',
+                    color: category === key ? cfg.color : '#8b949e',
+                    border: category === key ? `1px solid ${cfg.color}50` : '1px solid transparent'
+                  }}>
+                  {cfg.icon}<br />{cfg.label}
+                </button>
+              ))}
+            </div>
+
+            {/* New conversation button */}
+            <button onClick={handleNewConv}
+              className="w-full flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl text-sm font-semibold text-white cursor-pointer transition-all hover:opacity-90 hover:shadow-lg active:scale-[0.98]"
+              style={{ background: 'linear-gradient(135deg, #00c6a7, #00a8e8)' }}>
+              <span className="text-base font-bold">+</span> Nouveau chat
+            </button>
           </div>
 
-          {/* New conversation button */}
-          <button onClick={handleNewConv}
-            className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-sm font-semibold text-white cursor-pointer transition-opacity hover:opacity-90"
-            style={{ background: 'linear-gradient(135deg, #00c6a7, #00a8e8)' }}>
-            <span className="text-lg">+</span> Nouvelle conversation
-          </button>
+          {/* Divider */}
+          <div className="flex items-center gap-2 mb-2">
+            <div className="flex-1 h-px" style={{ background: 'var(--border)' }} />
+            <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: '#484f58' }}>
+              📋 Historique — {conversations.length}
+            </span>
+            <div className="flex-1 h-px" style={{ background: 'var(--border)' }} />
+          </div>
 
-          {/* Conversation list */}
-          <div className="flex-1 overflow-y-auto flex flex-col gap-1 custom-scrollbar">
+          {/* ── HISTORY SECTION ── */}
+          <div className="flex-1 overflow-y-auto flex flex-col gap-1 custom-scrollbar pb-2">
             {conversations.length === 0 ? (
-              <p className="text-sm px-3 py-2.5" style={{ color: '#8b949e' }}>Aucune conversation</p>
-            ) : (
-              conversations.map(conv => (
-                <div key={conv.id}
-                  onClick={() => { selectConversation(conv.id); closeSidebar() }}
-                  className="px-3 py-2.5 rounded-xl cursor-pointer transition-colors group relative"
-                  style={{
-                    background: currentConversation?.id === conv.id ? 'rgba(0,198,167,.15)' : 'rgba(255,255,255,.06)',
-                  }}
-                  onMouseEnter={e => { if (currentConversation?.id !== conv.id) e.currentTarget.style.background = 'rgba(255,255,255,.1)' }}
-                  onMouseLeave={e => { if (currentConversation?.id !== conv.id) e.currentTarget.style.background = 'rgba(255,255,255,.06)' }}>
-                  <div className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>{conv.title}</div>
-                  <div className="text-xs mt-0.5" style={{ color: '#8b949e' }}>
-                    {conv.lastMessage ? conv.lastMessage.content.substring(0, 40) + '...' : 'Aucun message'}
-                  </div>
-                  {/* Delete button */}
-                  <button onClick={(e) => handleDeleteConv(conv.id, e)}
-                    className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 w-6 h-6 rounded flex items-center justify-center text-xs transition-opacity cursor-pointer hover:bg-red-500/20"
-                    style={{ color: '#ef4444' }}>
-                    🗑
-                  </button>
+              <div className="flex flex-col items-center justify-center py-8 px-3">
+                <div className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl mb-3"
+                  style={{ background: 'rgba(255,255,255,.04)', border: '1px dashed var(--border)' }}>
+                  💬
                 </div>
-              ))
+                <p className="text-xs text-center leading-relaxed" style={{ color: '#484f58' }}>
+                  Aucune conversation pour le moment.<br />Commencez par poser une question de santé !
+                </p>
+              </div>
+            ) : (
+              conversations.map(conv => {
+                const catCfg = CATEGORY_CONFIG[conv.category] || CATEGORY_CONFIG.general
+                const isActive = currentConversation?.id === conv.id
+                return (
+                  <div key={conv.id}
+                    onClick={() => { selectConversation(conv.id); closeSidebar() }}
+                    className={`px-3 py-2.5 rounded-xl cursor-pointer transition-all group relative ${isActive ? 'ring-1' : ''}`}
+                    style={{
+                      background: isActive ? `${catCfg.color}15` : 'rgba(255,255,255,.04)',
+                      ringColor: isActive ? `${catCfg.color}40` : 'transparent',
+                    }}
+                    onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,.08)' }}
+                    onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'rgba(255,255,255,.04)' }}>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm flex-shrink-0">{catCfg.icon}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[13px] font-medium truncate" style={{ color: isActive ? catCfg.color : 'var(--foreground)' }}>
+                          {conv.title}
+                        </div>
+                        <div className="text-[11px] mt-0.5 truncate" style={{ color: '#484f58' }}>
+                          {conv.lastMessage
+                            ? (conv.lastMessage.role === 'user' ? '👤 ' : '🧠 ') + conv.lastMessage.content.substring(0, 35) + (conv.lastMessage.content.length > 35 ? '...' : '')
+                            : 'Nouvelle conversation'
+                          }
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                        <span className="text-[10px]" style={{ color: '#484f58' }}>{formatDate(conv.updatedAt || conv.createdAt)}</span>
+                        <button onClick={(e) => handleDeleteConv(conv.id, e)}
+                          className="opacity-0 group-hover:opacity-100 w-5 h-5 rounded flex items-center justify-center text-[10px] transition-all cursor-pointer hover:bg-red-500/20"
+                          style={{ color: '#ef4444' }}>
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })
             )}
           </div>
 
           {/* User info + logout at bottom */}
-          <div className="pt-3" style={{ borderTop: '1px solid var(--border)' }}>
+          <div className="pt-3 mt-1" style={{ borderTop: '1px solid var(--border)' }}>
             <div className="flex items-center gap-2.5 mb-2.5">
               <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white"
                 style={{ background: 'linear-gradient(135deg, #00c6a7, #00a8e8)' }}>
