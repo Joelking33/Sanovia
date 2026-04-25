@@ -1,16 +1,27 @@
-import ZAI from 'z-ai-web-dev-sdk'
+import { GoogleGenerativeAI } from '@google/generative-ai'
 
 // ============================================================
-// INITIALISATION DU CLIENT IA
+// INITIALISATION DU CLIENT GOOGLE GEMINI
 // ============================================================
 
-let zaiInstance: Awaited<ReturnType<typeof ZAI.create>> | null = null
+let genAI: GoogleGenerativeAI | null = null
+let model: ReturnType<GoogleGenerativeAI['getGenerativeModel']> | null = null
 
-async function getAI() {
-  if (!zaiInstance) {
-    zaiInstance = await ZAI.create()
+function getGenAI(): GoogleGenerativeAI {
+  if (!genAI) {
+    const apiKey = process.env.GOOGLE_GEMINI_API_KEY
+    if (!apiKey) {
+      throw new Error('GOOGLE_GEMINI_API_KEY non configurée')
+    }
+    genAI = new GoogleGenerativeAI(apiKey)
+    model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
   }
-  return zaiInstance
+  return genAI
+}
+
+function getModel() {
+  getGenAI() // ensure initialized
+  return model!
 }
 
 // ============================================================
@@ -48,14 +59,14 @@ const BASE_SYSTEM_PROMPT_FR = `Tu es Sanovia, un assistant d'information santé 
 
 ══ HORS SUJET — tu REFUSES poliment toute question sur ══
 • Finances, actualités, politique, sports, divertissement, technologie générale, etc.
-• Si hors sujet, réponds exactement : "⚕️ Je suis Sanovia, un assistant spécialisé en santé. Je ne peux pas répondre aux questions hors du domaine médical et du bien-être. Posez-moi une question de santé, je serai ravi de vous aider !"
+• Si hors sujet, réponds exactement : "Je suis Sanovia, un assistant spécialisé en santé. Je ne peux pas répondre aux questions hors du domaine médical et du bien-être. Posez-moi une question de santé, je serai ravi de vous aider !"
 
 ══ URGENCES ══
-Si tu détectes un risque vital immédiat (douleur thoracique, AVC, hémorragie sévère, perte de conscience, détresse respiratoire, intoxication grave), tu indiques en PREMIER : "🚨 URGENCE — Appelez immédiatement le SAMU : 185 ou les Pompiers : 180."
+Si tu détectes un risque vital immédiat (douleur thoracique, AVC, hémorragie sévère, perte de conscience, détresse respiratoire, intoxication grave), tu indiques en PREMIER : "URGENCE — Appelez immédiatement le SAMU : 185 ou les Pompiers : 180."
 
 ══ RÈGLE D'OR — FIN DE CHAQUE RÉPONSE ══
 Tu termines CHAQUE réponse (sauf hors-sujet) par ce rappel :
-"⚕️ Rappel important : Je suis un assistant informatif, pas un médecin. Ces informations ne remplacent pas un avis médical professionnel. Consultez un médecin ou rendez-vous dans un centre de santé pour toute situation personnelle."
+"Rappel important : Je suis un assistant informatif, pas un médecin. Ces informations ne remplacent pas un avis médical professionnel. Consultez un médecin ou rendez-vous dans un centre de santé pour toute situation personnelle."
 
 ══ FORMAT ══
 • Français clair et accessible, chaleureux et rassurant sans minimiser les risques.
@@ -145,7 +156,7 @@ function getSystemPrompt(language: string, category: string): string {
 }
 
 // ============================================================
-// ENVOI DE MESSAGE À L'IA
+// ENVOI DE MESSAGE À L'IA — GOOGLE GEMINI
 // ============================================================
 
 export async function chatWithAI(
@@ -155,37 +166,44 @@ export async function chatWithAI(
   conversationHistory: ChatMessage[] = []
 ): Promise<string> {
   try {
-    const ai = await getAI()
+    const aiModel = getModel()
 
     const systemPrompt = getSystemPrompt(language, category)
 
-    const messages: ChatMessage[] = [
-      { role: 'system', content: systemPrompt },
-      ...conversationHistory.map(msg => ({
-        role: msg.role as 'user' | 'assistant',
-        content: msg.content
-      })),
-      { role: 'user', content: userMessage }
-    ]
+    // Construire l'historique pour Gemini
+    // Gemini utilise "user" et "model" au lieu de "user" et "assistant"
+    const history = conversationHistory.map(msg => ({
+      role: msg.role === 'assistant' ? 'model' as const : 'user' as const,
+      parts: [{ text: msg.content }]
+    }))
 
-    const recentMessages = messages.slice(-20)
+    // Garder les 20 derniers messages
+    const recentHistory = history.slice(-20)
 
-    const completion = await ai.chat.completions.create({
-      messages: recentMessages as any,
-      temperature: 0.65,
-      max_tokens: 1200
+    const chat = aiModel.startChat({
+      history: recentHistory,
+      systemInstruction: systemPrompt,
     })
 
-    const responseContent = completion.choices?.[0]?.message?.content
+    const result = await chat.sendMessage(userMessage)
+    const response = result.response
+
+    const responseContent = response.text()
 
     if (!responseContent) {
-      return 'Désolé, je n\'ai pas pu générer une réponse. Veuillez réessayer.'
+      return 'Desole, je n\'ai pas pu generer une reponse. Veuillez reessayer.'
     }
 
     return responseContent
 
   } catch (err: any) {
     console.error('[Sanoovia AI Error]', err?.message || err)
-    return 'Je rencontre une difficulté technique. Veuillez réessayer dans un instant. Si le problème persiste, contactez le support.'
+
+    // Message d'erreur spécifique selon le problème
+    if (err?.message?.includes('GOOGLE_GEMINI_API_KEY')) {
+      return 'La configuration de l\'assistant IA est en cours. Veuillez reessayer dans quelques instants.'
+    }
+
+    return 'Je rencontre une difficulte technique. Veuillez reessayer dans un instant. Si le probleme persiste, contactez le support.'
   }
 }

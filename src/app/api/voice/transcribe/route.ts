@@ -11,6 +11,8 @@ import { authenticate, success, badRequest, error } from '@/lib/middleware'
  * - language (string, optionnel) — Langue de l'audio (fr, ba, dy, bq)
  *
  * Retourne le texte transcrit
+ *
+ * Utilise l'API Google Cloud Speech-to-Text (gratuit : 60 min/mois)
  */
 export async function POST(request: NextRequest) {
   const auth = await authenticate(request)
@@ -28,19 +30,61 @@ export async function POST(request: NextRequest) {
       return badRequest('Fichier audio trop volumineux (max 50 MB).')
     }
 
-    // Importer le SDK côté serveur uniquement
-    const ZAI = (await import('z-ai-web-dev-sdk')).default
-    const zai = await ZAI.create()
+    const apiKey = process.env.GOOGLE_GEMINI_API_KEY
 
-    // Transcrire l'audio
-    const response = await zai.audio.asr.create({
-      file_base64: audio
+    if (!apiKey) {
+      return error('Service de transcription non configure. Contactez l\'administrateur.')
+    }
+
+    // Mapping langue vers code BCP-47 pour Google Speech API
+    const langMap: Record<string, string> = {
+      fr: 'fr-FR',
+      ba: 'fr-CI',
+      dy: 'fr-CI',
+      bq: 'fr-CI'
+    }
+    const speechLang = langMap[language] || 'fr-FR'
+
+    // Utilisation de l'API Google Cloud Speech-to-Text v2 via REST
+    const apiUrl = `https://speech.googleapis.com/v2/projects/-/locations/global/recognizers/_:recognize?key=${apiKey}`
+
+    // Décoder le base64 et déterminer le type MIME
+    const audioBuffer = Buffer.from(audio, 'base64')
+    const audioContent = audioBuffer.toString('base64')
+
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        config: {
+          autoDetectDecodingConfig: true,
+          languageCodes: [speechLang],
+          model: 'long',
+        },
+        audio: {
+          content: audioContent,
+        }
+      })
     })
 
-    const transcribedText = response.text || ''
+    if (!response.ok) {
+      const errText = await response.text()
+      console.error('[Speech API Error]', errText)
+
+      // Fallback : si l'API Speech n'est pas activée, retourner un message
+      return success({
+        text: '',
+        language,
+        message: 'La transcription vocale necessite l\'activation de Google Cloud Speech-to-Text. Utilisez la saisie texte.',
+        fallback: true
+      })
+    }
+
+    const result = await response.json()
+    const transcribedText = result.results?.[0]?.alternatives?.[0]?.transcript || ''
 
     if (!transcribedText.trim()) {
-      return success({ text: '', language, message: 'Aucune parole détectée dans l\'audio.' })
+      return success({ text: '', language, message: 'Aucune parole detectee dans l\'audio.' })
     }
 
     return success({
@@ -51,6 +95,6 @@ export async function POST(request: NextRequest) {
 
   } catch (err: any) {
     console.error('[Voice Transcribe Error]', err?.message || err)
-    return error('Erreur lors de la transcription vocale. Veuillez réessayer.')
+    return error('Erreur lors de la transcription vocale. Veuillez reessayer.')
   }
 }
