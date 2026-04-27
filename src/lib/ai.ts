@@ -1,28 +1,12 @@
-import { GoogleGenerativeAI } from '@google/generative-ai'
-
 // ============================================================
-// INITIALISATION DU CLIENT GOOGLE GEMINI
+// SANOovIA - IA via OpenRouter
+// Compatible OpenAI — utilise fetch natif (pas de SDK requis)
 // ============================================================
 
-let genAI: GoogleGenerativeAI | null = null
-let model: ReturnType<GoogleGenerativeAI['getGenerativeModel']> | null = null
+const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions'
 
-function getGenAI(): GoogleGenerativeAI {
-  if (!genAI) {
-    const apiKey = process.env.GOOGLE_GEMINI_API_KEY
-    if (!apiKey) {
-      throw new Error('GOOGLE_GEMINI_API_KEY non configurée')
-    }
-    genAI = new GoogleGenerativeAI(apiKey)
-    model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
-  }
-  return genAI
-}
-
-function getModel() {
-  getGenAI() // ensure initialized
-  return model!
-}
+// Modèle IA par défaut (modèle gratuit sur OpenRouter)
+const DEFAULT_MODEL = 'google/gemini-2.0-flash-exp:free'
 
 // ============================================================
 // TYPES
@@ -34,7 +18,7 @@ interface ChatMessage {
 }
 
 // ============================================================
-// PROMPT SYSTÈME — VERSION COMPLÈTE (identique au design HTML)
+// PROMPT SYSTÈME — VERSION COMPLÈTE
 // ============================================================
 
 const BASE_SYSTEM_PROMPT_FR = `Tu es Sanovia, un assistant d'information santé numérique dédié aux utilisateurs en Côte d'Ivoire.
@@ -155,8 +139,15 @@ function getSystemPrompt(language: string, category: string): string {
   return lang[category] || lang.general
 }
 
+/**
+ * Récupère le modèle configuré ou le modèle par défaut
+ */
+function getModel(): string {
+  return process.env.OPENROUTER_MODEL || DEFAULT_MODEL
+}
+
 // ============================================================
-// ENVOI DE MESSAGE À L'IA — GOOGLE GEMINI
+// ENVOI DE MESSAGE À L'IA — OPENROUTER (format OpenAI)
 // ============================================================
 
 export async function chatWithAI(
@@ -166,29 +157,49 @@ export async function chatWithAI(
   conversationHistory: ChatMessage[] = []
 ): Promise<string> {
   try {
-    const aiModel = getModel()
+    const apiKey = process.env.OPENROUTER_API_KEY
+    if (!apiKey) {
+      console.error('[Sanoovia AI] OPENROUTER_API_KEY non configurée')
+      return 'La configuration de l\'assistant IA est en cours. Veuillez reessayer dans quelques instants.'
+    }
 
     const systemPrompt = getSystemPrompt(language, category)
+    const model = getModel()
 
-    // Construire l'historique pour Gemini
-    // Gemini utilise "user" et "model" au lieu de "user" et "assistant"
-    const history = conversationHistory.map(msg => ({
-      role: msg.role === 'assistant' ? 'model' as const : 'user' as const,
-      parts: [{ text: msg.content }]
-    }))
+    // Construire les messages au format OpenAI/OpenRouter
+    const messages: Array<{ role: string; content: string }> = [
+      { role: 'system', content: systemPrompt },
+      ...conversationHistory.slice(-20).map(msg => ({
+        role: msg.role === 'assistant' ? 'assistant' : 'user',
+        content: msg.content
+      })),
+      { role: 'user', content: userMessage }
+    ]
 
-    // Garder les 20 derniers messages
-    const recentHistory = history.slice(-20)
-
-    const chat = aiModel.startChat({
-      history: recentHistory,
-      systemInstruction: systemPrompt,
+    const response = await fetch(OPENROUTER_API_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': process.env.APP_URL || 'https://sanovia.vercel.app',
+        'X-Title': 'Sanovia',
+      },
+      body: JSON.stringify({
+        model,
+        messages,
+        temperature: 0.65,
+        max_tokens: 1200,
+      })
     })
 
-    const result = await chat.sendMessage(userMessage)
-    const response = result.response
+    if (!response.ok) {
+      const errorData = await response.text()
+      console.error('[Sanoovia AI] OpenRouter error:', response.status, errorData)
+      return 'Je rencontre une difficulte technique. Veuillez reessayer dans un instant.'
+    }
 
-    const responseContent = response.text()
+    const data = await response.json()
+    const responseContent = data.choices?.[0]?.message?.content
 
     if (!responseContent) {
       return 'Desole, je n\'ai pas pu generer une reponse. Veuillez reessayer.'
@@ -198,12 +209,6 @@ export async function chatWithAI(
 
   } catch (err: any) {
     console.error('[Sanoovia AI Error]', err?.message || err)
-
-    // Message d'erreur spécifique selon le problème
-    if (err?.message?.includes('GOOGLE_GEMINI_API_KEY')) {
-      return 'La configuration de l\'assistant IA est en cours. Veuillez reessayer dans quelques instants.'
-    }
-
     return 'Je rencontre une difficulte technique. Veuillez reessayer dans un instant. Si le probleme persiste, contactez le support.'
   }
 }
