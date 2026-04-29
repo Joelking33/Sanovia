@@ -71,7 +71,7 @@ export default function Home() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#0d1117]">
         <div className="text-center">
-          <img src="https://sanovia-ebon.vercel.app/public/Sanoviaa.jpeg" alt="Sanovia" className="w-16 h-16 rounded-2xl mb-4 object-cover" />
+          <div className="text-4xl mb-4">🧠</div>
           <p className="text-[#8b949e]">Chargement...</p>
         </div>
       </div>
@@ -120,7 +120,10 @@ function LoginView() {
       <div className="w-full max-w-[420px]">
         {/* Logo */}
         <div className="text-center mb-8">
-          <img src="https://sanovia-ebon.vercel.app/public/Sanoviaa.jpeg" alt="Sanovia" className="w-20 h-20 rounded-2xl mb-4 object-cover" />
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl mb-4"
+            style={{ background: 'linear-gradient(135deg,rgba(0,198,167,.2),rgba(0,168,232,.2))', border: '1px solid rgba(0,198,167,.3)' }}>
+            <span className="text-5xl">🧠</span>
+          </div>
           <h1 className="text-3xl font-bold" style={{ background: 'linear-gradient(135deg, #00c6a7, #00a8e8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
             Sanovia
           </h1>
@@ -231,7 +234,10 @@ function RegisterView() {
       <div className="w-full max-w-[420px]">
         {/* Logo */}
         <div className="text-center mb-6">
-          <img src="https://sanovia-ebon.vercel.app/public/Sanoviaa.jpeg" alt="Sanovia" className="w-16 h-16 rounded-2xl mb-3 object-cover" />
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-3"
+            style={{ background: 'linear-gradient(135deg,rgba(0,198,167,.2),rgba(0,168,232,.2))', border: '1px solid rgba(0,198,167,.3)' }}>
+            <span className="text-4xl">🧠</span>
+          </div>
           <h1 className="text-2xl font-bold" style={{ background: 'linear-gradient(135deg, #00c6a7, #00a8e8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
             Créer un compte
           </h1>
@@ -1345,7 +1351,10 @@ function ChatView() {
           </button>
           {/* Logo */}
           <div className="flex items-center gap-2">
-            <img src="https://sanovia-ebon.vercel.app/public/Sanoviaa.jpeg" alt="Sanovia" className="w-8 h-8 rounded-lg object-cover" />
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-lg"
+              style={{ background: 'linear-gradient(135deg,rgba(0,198,167,.3),rgba(0,168,232,.3))', border: '1px solid rgba(0,198,167,.4)' }}>
+              🧠
+            </div>
             <span className="text-base font-bold sanovia-gradient-text">Sanovia</span>
           </div>
           {/* Conversation title in topbar */}
@@ -1547,7 +1556,10 @@ function ChatView() {
             {!currentConversation || currentConversation.messages.length === 0 ? (
               /* WELCOME */
               <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center px-5">
-                <img src="https://sanovia-ebon.vercel.app/public/Sanoviaa.jpeg" alt="Sanovia" className="w-20 h-20 rounded-2xl object-cover" />
+                <div className="w-20 h-20 rounded-2xl flex items-center justify-center text-5xl"
+                  style={{ background: 'linear-gradient(135deg,rgba(0,198,167,.2),rgba(0,168,232,.2))', border: '1px solid rgba(0,198,167,.3)' }}>
+                  🧠
+                </div>
                 <h2 className="text-xl font-bold sanovia-gradient-text">Sanovia</h2>
                 <p className="text-sm max-w-[380px] leading-relaxed" style={{ color: '#8b949e' }}>
                   Bonjour {user?.name?.split(' ')[0]} ! Je suis votre assistant d&apos;information santé.
@@ -1591,7 +1603,10 @@ function ChatView() {
                 return (
                   <div key={msg.id} className={`flex gap-2.5 items-end ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
                     {msg.role === 'assistant' && (
-                      <img src="https://sanovia-ebon.vercel.app/public/Sanoviaa.jpeg" alt="Sanovia" className="w-8 h-8 rounded-full flex-shrink-0 object-cover" />
+                      <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-base"
+                        style={{ background: 'linear-gradient(135deg,rgba(0,198,167,.3),rgba(0,168,232,.3))', border: '1px solid rgba(0,198,167,.4)' }}>
+                        🧠
+                      </div>
                     )}
                     <div className={msg.role === 'user' ? 'text-right' : ''}>
                       <div className="max-w-[85%] md:max-w-[65%] px-3.5 py-2.5 md:px-4 md:py-3 rounded-2xl text-sm leading-relaxed"
@@ -1641,7 +1656,10 @@ function ChatView() {
             {/* Typing / Transcribing indicator */}
             {isSendingMessage && (
               <div className="flex gap-2.5 items-end">
-                <img src="https://sanovia-ebon.vercel.app/public/Sanoviaa.jpeg" alt="Sanovia" className="w-8 h-8 rounded-full flex-shrink-0 object-cover" />
+                <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-base"
+                  style={{ background: 'linear-gradient(135deg,rgba(0,198,167,.3),rgba(0,168,232,.3))', border: '1px solid rgba(0,198,167,.4)' }}>
+                  🧠
+                </div>
                 <div className="px-4 py-0 rounded-2xl" style={{ background: 'var(--card)', border: '1px solid var(--border)', borderBottomLeftRadius: '4px' }}>
                   <div className="flex gap-1.5 py-3 px-1">
                     <span className="typing-dot" />
