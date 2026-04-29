@@ -1,11 +1,8 @@
 // ============================================================
-// SANOovIA - IA via OpenRouter
-// Compatible OpenAI — utilise fetch natif (pas de SDK requis)
+// SANOovIA - IA via OpenRouter (production Vercel)
 // ============================================================
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions'
-
-// Modèle IA par défaut (modèle gratuit sur OpenRouter)
 const DEFAULT_MODEL = 'google/gemini-2.0-flash-exp:free'
 
 // ============================================================
@@ -61,93 +58,33 @@ Tu termines CHAQUE réponse (sauf hors-sujet) par ce rappel :
 const SYSTEM_PROMPTS: Record<string, Record<string, string>> = {
   fr: {
     general: BASE_SYSTEM_PROMPT_FR,
-    premiers_secours: `Tu es Sanovia, experte en premiers secours en Côte d'Ivoire.
-
-${BASE_SYSTEM_PROMPT_FR}
-
-══ SPÉCIALITÉ PREMIERS SECOURS ══
-• Donner des instructions claires pour les gestes de premiers secours
-• Couvrir : brûlures, coupures, saignements, étouffement, fractures, morsures, réactions allergiques, etc.
-• Toujours préciser quand appeler les urgences : SAMU 185, Pompiers 180
-• Rappeler les numéros d'urgence de Côte d'Ivoire`,
-    grossesse: `Tu es Sanovia, conseillère spécialisée en santé maternelle en Côte d'Ivoire.
-
-${BASE_SYSTEM_PROMPT_FR}
-
-══ SPÉCIALITÉ GROSSESSE ══
-• Informer sur le suivi de grossesse par trimestre
-• Conseiller sur l'alimentation, l'hygiène, et l'activité physique pendant la grossesse
-• Identifier les signes d'alerte nécessitant une consultation médicale
-• Donner des conseils sur la préparation à l'accouchement
-• Orientier vers les structures maternelles en Côte d'Ivoire (CHU, cliniques)`
+    premiers_secours: `Tu es Sanovia, experte en premiers secours en Côte d'Ivoire.\n\n${BASE_SYSTEM_PROMPT_FR}\n\n══ SPÉCIALITÉ PREMIERS SECOURS ══\n• Donner des instructions claires pour les gestes de premiers secours\n• Couvrir : brûlures, coupures, saignements, étouffement, fractures, morsures, réactions allergiques, etc.\n• Toujours préciser quand appeler les urgences : SAMU 185, Pompiers 180\n• Rappeler les numéros d'urgence de Côte d'Ivoire`,
+    grossesse: `Tu es Sanovia, conseillère spécialisée en santé maternelle en Côte d'Ivoire.\n\n${BASE_SYSTEM_PROMPT_FR}\n\n══ SPÉCIALITÉ GROSSESSE ══\n• Informer sur le suivi de grossesse par trimestre\n• Conseiller sur l'alimentation, l'hygiène, et l'activité physique pendant la grossesse\n• Identifier les signes d'alerte nécessitant une consultation médicale\n• Donner des conseils sur la préparation à l'accouchement\n• Orienter vers les structures maternelles en Côte d'Ivoire (CHU, cliniques)`
   },
   ba: {
-    general: `Luɛ Sanoovia, e la sran man jɛ. E ka :
-- Kɔlɔlɔnw baara kɛ
-- Glɔ glɔbɛlɛw sɔrɔ (kɛnɛ, ɛnɛnɛman, kan man kɛnɛ, etc.)
-- Daminɛ o yɛ sran man dɛnnin ye — e tɛ ɛ lɔdɔnni bɛɛ ka fɛn
-- Ka baoulɛ kan ka dɛmɛ`,
-    premiers_secours: `Luɛ Sanoovia, e la sran man lɔdɔnnin baara la jɛ. E ka :
-- Kɔlɔlɔnw ɛlɛmɔn sɔrɔ (ɔrɔ, fɛn banna, sɔrɔn, dɔgɔkɛnɛ, etc.)
-- Daminɛ e ɛ sran man dɛnnin ye
-- Ka baoulɛ kan ka dɛmɛ`,
-    grossesse: `Luɛ Sanoovia, e la glɔ glɔbɛlɛ sɔrɔ la jɛ. E ka :
-- Glɔ glɔbɛlɛ ɛlɛmɔn sɔrɔ
-- Kɛnɛ, ɛnɛnɛman, baara sɔrɔ glɔ kɛnɛ
-- Glɔ glɔbɛlɛ kan man ɛlɛmɔn sɔrɔ
-- Ka baoulɛ kan ka dɛmɛ`
+    general: `Luɛ Sanoovia, e la sran man jɛ. E ka :\n- Kɔlɔlɔnw baara kɛ\n- Glɔ glɔbɛlɛw sɔrɔ (kɛnɛ, ɛnɛnɛman, kan man kɛnɛ, etc.)\n- Daminɛ o yɛ sran man dɛnnin ye — e tɛ ɛ lɔdɔnni bɛɛ ka fɛn\n- Ka baoulɛ kan ka dɛmɛ`,
+    premiers_secours: `Luɛ Sanoovia, e la sran man lɔdɔnnin baara la jɛ. E ka :\n- Kɔlɔlɔnw ɛlɛmɔn sɔrɔ (ɔrɔ, fɛn banna, sɔrɔn, dɔgɔkɛnɛ, etc.)\n- Daminɛ e ɛ sran man dɛnnin ye\n- Ka baoulɛ kan ka dɛmɛ`,
+    grossesse: `Luɛ Sanoovia, e la glɔ glɔbɛlɛ sɔrɔ la jɛ. E ka :\n- Glɔ glɔbɛlɛ ɛlɛmɔn sɔrɔ\n- Kɛnɛ, ɛnɛnɛman, baara sɔrɔ glɔ kɛnɛ\n- Glɔ glɔbɛlɛ kan man ɛlɛmɔn sɔrɔ\n- Ka baoulɛ kan ka dɛmɛ`
   },
   dy: {
-    general: `I tɔɔrɔ Sanoovia ye, a ye farikoloɲɛnɛ ye min bɛ banjɛw ɛɛrɛ. A bɛ :
-- Banjɛ ɛɛrɛw la dɛmɛ
-- Glɔ n'u bɛ sɔrɔ (kɛnɛ, ɛnɛnɛman, kan man kɛnɛ, etc.)
-- A lakana n'a tɛ ɛnɛ banna — a tɛ banna dɛnnin bɛɛ
-- Ka dioula kan fɛ ka dɛmɛ`,
-    premiers_secours: `I tɔɔrɔ Sanoovia ye, a ye banjɛ ɛɛrɛ la jɛlen ye. A bɛ :
-- Banjɛ ɛɛrɛw la dɛmɛ (ɔrɔ, fɛn banna, sɔrɔn, dɔgɔkɛnɛ, etc.)
-- A lakana n'a tɛ ɛnɛ banna
-- Ka dioula kan fɛ ka dɛmɛ`,
-    grossesse: `I tɔɔrɔ Sanoovia ye, a ye glɔ sɔrɔ la jɛlen ye. A bɛ :
-- Glɔ sɔrɔw la dɛmɛ
-- Kɛnɛ, ɛnɛnɛman, baara sɔrɔ glɔ kɛnɛ
-- Glɔ kan man ɛlɛmɔn sɔrɔ
-- Ka dioula kan fɛ ka dɛmɛ`
+    general: `I tɔɔrɔ Sanoovia ye, a ye farikoloɲɛnɛ ye min bɛ banjɛw ɛɛrɛ. A bɛ :\n- Banjɛ ɛɛrɛw la dɛmɛ\n- Glɔ n'u bɛ sɔrɔ (kɛnɛ, ɛnɛnɛman, kan man kɛnɛ, etc.)\n- A lakana n'a tɛ ɛnɛ banna — a tɛ banna dɛnnin bɛɛ\n- Ka dioula kan fɛ ka dɛmɛ`,
+    premiers_secours: `I tɔɔrɔ Sanoovia ye, a ye banjɛ ɛɛrɛ la jɛlen ye. A bɛ :\n- Banjɛ ɛɛrɛw la dɛmɛ (ɔrɔ, fɛn banna, sɔrɔn, dɔgɔkɛnɛ, etc.)\n- A lakana n'a tɛ ɛnɛ banna\n- Ka dioula kan fɛ ka dɛmɛ`,
+    grossesse: `I tɔɔrɔ Sanoovia ye, a ye glɔ sɔrɔ la jɛlen ye. A bɛ :\n- Glɔ sɔrɔw la dɛmɛ\n- Kɛnɛ, ɛnɛnɛman, baara sɔrɔ glɔ kɛnɛ\n- Glɔ kan man ɛlɛmɔn sɔrɔ\n- Ka dioula kan fɛ ka dɛmɛ`
   },
   bq: {
-    general: `Sanoovia yɛ, a lɛ sran ɛlɛmɔn wle. A ka :
-- Sran man ɛlɛmɔn wle
-- Glɔ ɛlɛmɔn sɔrɔ (kɛnɛ, ɛnɛnɛman, kan man kɛnɛ, etc.)
-- A lakana n'a tɛ ɛnɛ banna — a tɛ sran man dɛnnin bɛɛ
-- Ka bété kan ka dɛmɛ`,
-    premiers_secours: `Sanoovia yɛ, a lɛ sran man ɛlɛmɔn wle. A ka :
-- Kɔlɔlɔnw ɛlɛmɔn wle (ɔrɔ, fɛn banna, sɔrɔn, dɔgɔkɛnɛ, etc.)
-- A lakana n'a tɛ ɛnɛ banna
-- Ka bété kan ka dɛmɛ`,
-    grossesse: `Sanoovia yɛ, a lɛ glɔ ɛlɛmɔn wle. A ka :
-- Glɔ glɔbɛlɛ ɛlɛmɔn wle
-- Kɛnɛ, ɛnɛnɛman, baara sɔrɔ glɔ kɛnɛ
-- Glɔ kan man ɛlɛmɔn sɔrɔ
-- Ka bété kan ka dɛmɛ`
+    general: `Sanoovia yɛ, a lɛ sran ɛlɛmɔn wle. A ka :\n- Sran man ɛlɛmɔn wle\n- Glɔ ɛlɛmɔn sɔrɔ (kɛnɛ, ɛnɛnɛman, kan man kɛnɛ, etc.)\n- A lakana n'a tɛ ɛnɛ banna — a tɛ sran man dɛnnin bɛɛ\n- Ka bété kan ka dɛmɛ`,
+    premiers_secours: `Sanoovia yɛ, a lɛ sran man ɛlɛmɔn wle. A ka :\n- Kɔlɔlɔnw ɛlɛmɔn wle (ɔrɔ, fɛn banna, sɔrɔn, dɔgɔkɛnɛ, etc.)\n- A lakana n'a tɛ ɛnɛ banna\n- Ka bété kan ka dɛmɛ`,
+    grossesse: `Sanoovia yɛ, a lɛ glɔ ɛlɛmɔn wle. A ka :\n- Glɔ glɔbɛlɛ ɛlɛmɔn wle\n- Kɛnɛ, ɛnɛnɛman, baara sɔrɔ glɔ kɛnɛ\n- Glɔ kan man ɛlɛmɔn sɔrɔ\n- Ka bété kan ka dɛmɛ`
   }
 }
 
-/**
- * Récupère le prompt système adapté à la langue et à la catégorie
- */
 function getSystemPrompt(language: string, category: string): string {
   const lang = SYSTEM_PROMPTS[language] || SYSTEM_PROMPTS.fr
   return lang[category] || lang.general
 }
 
-/**
- * Récupère le modèle configuré ou le modèle par défaut
- */
-function getModel(): string {
-  return process.env.OPENROUTER_MODEL || DEFAULT_MODEL
-}
-
 // ============================================================
-// ENVOI DE MESSAGE À L'IA — OPENROUTER (format OpenAI)
+// OpenRouter — unique méthode de communication IA
 // ============================================================
 
 export async function chatWithAI(
@@ -156,26 +93,27 @@ export async function chatWithAI(
   category: string = 'general',
   conversationHistory: ChatMessage[] = []
 ): Promise<string> {
+  const apiKey = process.env.OPENROUTER_API_KEY
+
+  if (!apiKey) {
+    console.error('[Sanoovia AI] OPENROUTER_API_KEY is not set')
+    return 'Je rencontre une difficulté technique. La clé API OpenRouter n\'est pas configurée. Veuillez contacter l\'administrateur.'
+  }
+
+  const model = process.env.OPENROUTER_MODEL || DEFAULT_MODEL
+  const systemPrompt = getSystemPrompt(language, category)
+
+  // Construire les messages : système + historique (20 derniers) + nouveau message
+  const messages: Array<{ role: string; content: string }> = [
+    { role: 'system', content: systemPrompt },
+    ...conversationHistory.slice(-20).map(msg => ({
+      role: msg.role === 'assistant' ? 'assistant' : 'user',
+      content: msg.content
+    })),
+    { role: 'user', content: userMessage }
+  ]
+
   try {
-    const apiKey = process.env.OPENROUTER_API_KEY
-    if (!apiKey) {
-      console.error('[Sanoovia AI] OPENROUTER_API_KEY non configurée')
-      return 'La configuration de l\'assistant IA est en cours. Veuillez reessayer dans quelques instants.'
-    }
-
-    const systemPrompt = getSystemPrompt(language, category)
-    const model = getModel()
-
-    // Construire les messages au format OpenAI/OpenRouter
-    const messages: Array<{ role: string; content: string }> = [
-      { role: 'system', content: systemPrompt },
-      ...conversationHistory.slice(-20).map(msg => ({
-        role: msg.role === 'assistant' ? 'assistant' : 'user',
-        content: msg.content
-      })),
-      { role: 'user', content: userMessage }
-    ]
-
     const response = await fetch(OPENROUTER_API_URL, {
       method: 'POST',
       headers: {
@@ -193,22 +131,22 @@ export async function chatWithAI(
     })
 
     if (!response.ok) {
-      const errorData = await response.text()
-      console.error('[Sanoovia AI] OpenRouter error:', response.status, errorData)
-      return 'Je rencontre une difficulte technique. Veuillez reessayer dans un instant.'
+      const errorText = await response.text()
+      console.error('[Sanoovia AI] OpenRouter API error:', response.status, errorText)
+      return 'Je rencontre une difficulté technique. Veuillez réessayer dans un instant.'
     }
 
     const data = await response.json()
     const responseContent = data.choices?.[0]?.message?.content
 
-    if (!responseContent) {
-      return 'Desole, je n\'ai pas pu generer une reponse. Veuillez reessayer.'
+    if (responseContent) {
+      return responseContent
     }
 
-    return responseContent
-
+    console.error('[Sanoovia AI] OpenRouter returned empty response:', JSON.stringify(data).slice(0, 500))
+    return 'Je rencontre une difficulté technique. Veuillez réessayer dans un instant.'
   } catch (err: any) {
-    console.error('[Sanoovia AI Error]', err?.message || err)
-    return 'Je rencontre une difficulte technique. Veuillez reessayer dans un instant. Si le probleme persiste, contactez le support.'
+    console.error('[Sanoovia AI] OpenRouter fetch error:', err?.message || err)
+    return 'Je rencontre une difficulté technique. Veuillez réessayer dans un instant.'
   }
 }

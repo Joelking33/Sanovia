@@ -86,6 +86,14 @@ export default function Home() {
     return <RegisterView />
   }
 
+  if (view === 'forgot-password') {
+    return <ForgotPasswordView />
+  }
+
+  if (view === 'reset-password') {
+    return <ResetPasswordView />
+  }
+
   return <LoginView />
 }
 
@@ -172,7 +180,13 @@ function LoginView() {
             </button>
           </form>
 
-          <div className="mt-5 text-center">
+          <div className="mt-4 flex items-center justify-between">
+            <button onClick={() => setView('forgot-password')} className="text-xs cursor-pointer transition-colors hover:underline" style={{ color: '#8b949e' }}>
+              Mot de passe oublié ?
+            </button>
+          </div>
+
+          <div className="mt-3 text-center">
             <p className="text-sm text-[#8b949e]">
               Pas encore de compte ?{' '}
               <button onClick={() => setView('register')} className="font-semibold" style={{ color: '#00c6a7' }}>
@@ -209,7 +223,7 @@ function RegisterView() {
     setError('')
     if (!name || !email || !password || !confirmPassword) { setError('Veuillez remplir tous les champs.'); return }
     if (password.length < 8) { setError('Le mot de passe doit contenir au moins 8 caractères.'); return }
-    if (!/[A-Z]/.test(password) || !/[0-9]/.test(password)) { setError('Le mot de passe doit contenir au moins une majuscule et un chiffre.'); return }
+    if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) { setError('Le mot de passe doit contenir au moins une majuscule, une minuscule et un chiffre.'); return }
     if (password !== confirmPassword) { setError('Les mots de passe ne correspondent pas.'); return }
     const result = await register(email, password, name, language)
     if (!result.success) setError(result.error || 'Erreur d\'inscription.')
@@ -327,6 +341,325 @@ function RegisterView() {
       </div>
     </div>
   )
+}
+
+// ============================================================
+// FORGOT PASSWORD VIEW
+// ============================================================
+function ForgotPasswordView() {
+  const { forgotPassword, isLoading, setView } = useAuthStore()
+  const [email, setEmail] = useState('')
+  const [error, setError] = useState('')
+  const [successMsg, setSuccessMsg] = useState('')
+  const [devToken, setDevToken] = useState<string | null>(null)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+    setSuccessMsg('')
+    setDevToken(null)
+
+    if (!email) { setError('Veuillez entrer votre adresse email.'); return }
+
+    const result = await forgotPassword(email)
+    if (result.success) {
+      setSuccessMsg('Si cette adresse email est associée à un compte, un email de réinitialisation a été envoyé. Vérifiez votre boîte de réception (et spam).')
+      setEmail('')
+      // En mode développement, afficher le token
+      if (result.devToken) {
+        setDevToken(result.devToken)
+      }
+    } else {
+      setError(result.error || 'Erreur lors de la demande.')
+    }
+  }
+
+  const handleUseToken = () => {
+    if (devToken) {
+      useAuthStore.getState().setResetToken(devToken)
+      useAuthStore.getState().setView('reset-password')
+    }
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-[#0d1117] p-4">
+      <div className="w-full max-w-[420px]">
+        {/* Logo */}
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl mb-4"
+            style={{ background: 'linear-gradient(135deg,rgba(0,198,167,.2),rgba(0,168,232,.2))', border: '1px solid rgba(0,198,167,.3)' }}>
+            <span className="text-5xl">🔐</span>
+          </div>
+          <h1 className="text-3xl font-bold" style={{ background: 'linear-gradient(135deg, #00c6a7, #00a8e8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+            Sanovia
+          </h1>
+          <p className="text-[#8b949e] mt-2 text-sm">Réinitialisation du mot de passe</p>
+        </div>
+
+        {/* Form */}
+        <div className="rounded-2xl p-7" style={{ background: '#161b22', border: '1px solid #21262d' }}>
+          <h2 className="text-lg font-semibold text-[#e6edf3] mb-2 text-center">Mot de passe oublié ?</h2>
+          <p className="text-sm text-[#8b949e] mb-6 text-center leading-relaxed">
+            Entrez l&apos;adresse email associée à votre compte. Nous vous enverrons un lien pour réinitialiser votre mot de passe.
+          </p>
+
+          {error && (
+            <div className="mb-4 p-3 rounded-lg text-sm" style={{ background: 'rgba(239,68,68,.1)', border: '1px solid rgba(239,68,68,.3)', color: '#fca5a5' }}>
+              {error}
+            </div>
+          )}
+
+          {successMsg && !devToken && (
+            <div className="mb-4 p-3 rounded-lg text-sm leading-relaxed" style={{ background: 'rgba(0,198,167,.08)', border: '1px solid rgba(0,198,167,.25)', color: '#00c6a7' }}>
+              ✅ {successMsg}
+            </div>
+          )}
+
+          {devToken && (
+            <div className="mb-4 p-3 rounded-lg text-sm leading-relaxed" style={{ background: 'rgba(234,179,8,.08)', border: '1px solid rgba(234,179,8,.25)', color: '#fbbf24' }}>
+              <p className="mb-2">⚙️ <strong>Mode développement</strong> — SMTP non configuré.</p>
+              <p className="mb-2 text-xs opacity-80">{successMsg}</p>
+              <div className="mt-2 p-2 rounded text-xs font-mono break-all" style={{ background: 'rgba(0,0,0,.3)', color: '#fde68a' }}>
+                Token: {devToken}
+              </div>
+              <button onClick={handleUseToken}
+                className="mt-2 w-full py-2 rounded-lg text-xs font-semibold text-black cursor-pointer transition-opacity hover:opacity-90"
+                style={{ background: 'linear-gradient(135deg, #fbbf24, #f59e0b)' }}>
+                Utiliser ce token pour réinitialiser
+              </button>
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm text-[#8b949e] mb-1.5">Adresse email</label>
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-lg text-sm text-[#e6edf3] placeholder-[#484f58] outline-none transition-colors"
+                style={{ background: '#0d1117', border: '1px solid #21262d' }}
+                onFocus={e => e.currentTarget.style.borderColor = '#00c6a7'}
+                onBlur={e => e.currentTarget.style.borderColor = '#21262d'}
+                placeholder="votre@email.com" />
+            </div>
+
+            <button type="submit" disabled={isLoading}
+              className="w-full py-2.5 rounded-lg text-sm font-semibold text-white transition-opacity disabled:opacity-50"
+              style={{ background: 'linear-gradient(135deg, #00c6a7, #00a8e8)' }}>
+              {isLoading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <span className="typing-dot" style={{ background: '#fff' }} />
+                  <span className="typing-dot" style={{ background: '#fff' }} />
+                  <span className="typing-dot" style={{ background: '#fff' }} />
+                </span>
+              ) : 'Envoyer le lien de réinitialisation'}
+            </button>
+          </form>
+
+          <div className="mt-5 text-center">
+            <button onClick={() => setView('login')} className="text-sm cursor-pointer transition-colors hover:underline" style={{ color: '#00c6a7' }}>
+              ← Retour à la connexion
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ============================================================
+// RESET PASSWORD VIEW
+// ============================================================
+function ResetPasswordView() {
+  const { resetPassword, isLoading, setView, resetToken } = useAuthStore()
+  const [token, setToken] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const stored = useAuthStore.getState().resetToken
+      if (stored) return stored
+      const params = new URLSearchParams(window.location.search)
+      const urlToken = params.get('reset')
+      if (urlToken) return urlToken
+    }
+    return ''
+  })
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [error, setError] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirm, setShowConfirm] = useState(false)
+  const [isSuccess, setIsSuccess] = useState(false)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+
+    if (!token) { setError('Le token de réinitialisation est requis.'); return }
+    if (!password || !confirmPassword) { setError('Veuillez remplir tous les champs.'); return }
+    if (password.length < 8) { setError('Le mot de passe doit contenir au moins 8 caractères.'); return }
+    if (!/[A-Z]/.test(password)) { setError('Le mot de passe doit contenir au moins une majuscule.'); return }
+    if (!/[0-9]/.test(password)) { setError('Le mot de passe doit contenir au moins un chiffre.'); return }
+    if (password !== confirmPassword) { setError('Les mots de passe ne correspondent pas.'); return }
+
+    const result = await resetPassword(token, password, confirmPassword)
+    if (result.success) {
+      setIsSuccess(true)
+    } else {
+      setError(result.error || 'Erreur lors de la réinitialisation.')
+    }
+  }
+
+  // Success state
+  if (isSuccess) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#0d1117] p-4">
+        <div className="w-full max-w-[420px] text-center">
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl mb-6"
+            style={{ background: 'linear-gradient(135deg,rgba(0,198,167,.2),rgba(0,168,232,.2))', border: '1px solid rgba(0,198,167,.3)' }}>
+            <span className="text-5xl">✅</span>
+          </div>
+          <h2 className="text-2xl font-bold mb-3" style={{ color: '#e6edf3' }}>Mot de passe mis à jour !</h2>
+          <p className="text-sm mb-8 leading-relaxed" style={{ color: '#8b949e' }}>
+            Votre mot de passe a été modifié avec succès. Vous pouvez maintenant vous connecter avec votre nouveau mot de passe.
+          </p>
+          <button onClick={() => setView('login')}
+            className="px-8 py-2.5 rounded-lg text-sm font-semibold text-white cursor-pointer transition-opacity hover:opacity-90"
+            style={{ background: 'linear-gradient(135deg, #00c6a7, #00a8e8)' }}>
+            Se connecter
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-[#0d1117] p-4">
+      <div className="w-full max-w-[420px]">
+        {/* Logo */}
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl mb-4"
+            style={{ background: 'linear-gradient(135deg,rgba(0,198,167,.2),rgba(0,168,232,.2))', border: '1px solid rgba(0,198,167,.3)' }}>
+            <span className="text-5xl">🔑</span>
+          </div>
+          <h1 className="text-3xl font-bold" style={{ background: 'linear-gradient(135deg, #00c6a7, #00a8e8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+            Sanovia
+          </h1>
+          <p className="text-[#8b949e] mt-2 text-sm">Nouveau mot de passe</p>
+        </div>
+
+        {/* Form */}
+        <div className="rounded-2xl p-7" style={{ background: '#161b22', border: '1px solid #21262d' }}>
+          <h2 className="text-lg font-semibold text-[#e6edf3] mb-2 text-center">Définir un nouveau mot de passe</h2>
+          <p className="text-sm text-[#8b949e] mb-6 text-center leading-relaxed">
+            Créez un mot de passe fort pour sécuriser votre compte Sanovia.
+          </p>
+
+          {error && (
+            <div className="mb-4 p-3 rounded-lg text-sm" style={{ background: 'rgba(239,68,68,.1)', border: '1px solid rgba(239,68,68,.3)', color: '#fca5a5' }}>
+              {error}
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Token input (for dev/manual entry) */}
+            <div>
+              <label className="block text-sm text-[#8b949e] mb-1.5">Token de réinitialisation</label>
+              <input
+                type="text" value={token} onChange={e => setToken(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-lg text-xs text-[#e6edf3] placeholder-[#484f58] outline-none transition-colors font-mono"
+                style={{ background: '#0d1117', border: '1px solid #21262d' }}
+                onFocus={e => e.currentTarget.style.borderColor = '#00c6a7'}
+                onBlur={e => e.currentTarget.style.borderColor = '#21262d'}
+                placeholder="Collez le token de réinitialisation ici..."
+                readOnly={!!resetToken}
+              />
+              {resetToken && (
+                <p className="text-[11px] mt-1" style={{ color: '#484f58' }}>Token pré-rempli (mode développement)</p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm text-[#8b949e] mb-1.5">Nouveau mot de passe</label>
+              <div className="relative">
+                <input type={showPassword ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-lg text-sm text-[#e6edf3] placeholder-[#484f58] outline-none transition-colors pr-10"
+                  style={{ background: '#0d1117', border: '1px solid #21262d' }}
+                  onFocus={e => e.currentTarget.style.borderColor = '#00c6a7'}
+                  onBlur={e => e.currentTarget.style.borderColor = '#21262d'}
+                  placeholder="Min. 8 caractères, 1 majuscule, 1 chiffre" />
+                <button type="button" onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8b949e] hover:text-[#e6edf3] text-sm">
+                  {showPassword ? '🙈' : '👁️'}
+                </button>
+              </div>
+              {/* Password strength indicator */}
+              {password && (
+                <div className="mt-2 flex gap-1">
+                  {[1, 2, 3, 4].map(level => {
+                    const filled = level <= getPasswordStrength(password)
+                    const colors = ['#ef4444', '#f59e0b', '#eab308', '#00c6a7']
+                    return (
+                      <div key={level} className="flex-1 h-1 rounded-full transition-all"
+                        style={{ background: filled ? colors[level - 1] : '#21262d' }} />
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm text-[#8b949e] mb-1.5">Confirmer le mot de passe</label>
+              <div className="relative">
+                <input type={showConfirm ? 'text' : 'password'} value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-lg text-sm text-[#e6edf3] placeholder-[#484f58] outline-none transition-colors pr-10"
+                  style={{ background: '#0d1117', border: '1px solid #21262d' }}
+                  onFocus={e => e.currentTarget.style.borderColor = '#00c6a7'}
+                  onBlur={e => e.currentTarget.style.borderColor = '#21262d'}
+                  placeholder="Confirmez votre nouveau mot de passe" />
+                <button type="button" onClick={() => setShowConfirm(!showConfirm)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8b949e] hover:text-[#e6edf3] text-sm">
+                  {showConfirm ? '🙈' : '👁️'}
+                </button>
+              </div>
+              {confirmPassword && password && confirmPassword !== password && (
+                <p className="text-[11px] mt-1" style={{ color: '#ef4444' }}>Les mots de passe ne correspondent pas.</p>
+              )}
+            </div>
+
+            <button type="submit" disabled={isLoading}
+              className="w-full py-2.5 rounded-lg text-sm font-semibold text-white transition-opacity disabled:opacity-50"
+              style={{ background: 'linear-gradient(135deg, #00c6a7, #00a8e8)' }}>
+              {isLoading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <span className="typing-dot" style={{ background: '#fff' }} />
+                  <span className="typing-dot" style={{ background: '#fff' }} />
+                  <span className="typing-dot" style={{ background: '#fff' }} />
+                </span>
+              ) : 'Réinitialiser mon mot de passe'}
+            </button>
+          </form>
+
+          <div className="mt-5 text-center">
+            <button onClick={() => setView('login')} className="text-sm cursor-pointer transition-colors hover:underline" style={{ color: '#00c6a7' }}>
+              ← Retour à la connexion
+            </button>
+          </div>
+        </div>
+
+        {/* Info */}
+        <div className="mt-4 p-3 rounded-xl text-xs leading-relaxed"
+          style={{ background: 'rgba(0,198,167,.06)', border: '1px solid rgba(0,198,167,.15)', color: '#8b949e' }}>
+          ⏱️ Le lien de réinitialisation expire dans <strong>1 heure</strong>. Si vous n&apos;avez pas reçu l&apos;email, vérifiez vos spams ou refaites une demande.
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function getPasswordStrength(password: string): number {
+  let strength = 0
+  if (password.length >= 8) strength++
+  if (/[A-Z]/.test(password) && /[a-z]/.test(password)) strength++
+  if (/[0-9]/.test(password)) strength++
+  if (/[^A-Za-z0-9]/.test(password)) strength++
+  return strength
 }
 
 // ============================================================
@@ -579,7 +912,7 @@ function VoiceMessagePlayer({ audioBase64, format = 'mp3', role, language }: {
   })
 
   return (
-    <div className="flex items-center gap-2.5 min-w-[200px]">
+    <div className="flex items-center gap-2.5 min-w-[160px] md:min-w-[200px]">
       {/* Play button */}
       <button
         onClick={togglePlay}
@@ -639,17 +972,22 @@ function TTSPlayButton({ text, language }: { text: string; language: string }) {
   const [isLoading, setIsLoading] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
   const [audioBase64, setAudioBase64] = useState<string | null>(null)
-  const [format, setFormat] = useState('mp3')
-  const audioRef = useRef<HTMLAudioElement | null>(null)
+  // Map language codes to BCP 47 voice locale codes for SpeechSynthesis
+  const langVoiceMap: Record<string, string> = {
+    fr: 'fr-FR',
+    ba: 'fr-CI',   // Baoulé — fallback to French (Ivory Coast)
+    dy: 'fr-CI',   // Dioula — fallback to French (Ivory Coast)
+    bq: 'fr-CI'    // Bété — fallback to French (Ivory Coast)
+  }
 
   const handlePlay = async () => {
-    // If already loaded, toggle play
-    if (audioBase64 && audioRef.current) {
+    // If already speaking, toggle pause/resume
+    if (window.speechSynthesis.speaking) {
       if (isPlaying) {
-        audioRef.current.pause()
+        window.speechSynthesis.pause()
         setIsPlaying(false)
       } else {
-        audioRef.current.play()
+        window.speechSynthesis.resume()
         setIsPlaying(true)
       }
       return
@@ -670,29 +1008,36 @@ function TTSPlayButton({ text, language }: { text: string; language: string }) {
       })
       const data = await res.json()
       if (data.success) {
-        setAudioBase64(data.data.audio)
-        setFormat(data.data.format || 'mp3')
+        const textToSpeak = data.data.text || text
 
-        // Play immediately
-        const mimeType = data.data.format === 'wav' ? 'audio/wav' : 'audio/mpeg'
-        const byteChars = atob(data.data.audio)
-        const byteNumbers = new Array(byteChars.length)
-        for (let i = 0; i < byteChars.length; i++) {
-          byteNumbers[i] = byteChars.charCodeAt(i)
-        }
-        const byteArray = new Uint8Array(byteNumbers)
-        const blob = new Blob([byteArray], { type: mimeType })
-        const url = URL.createObjectURL(blob)
+        // Cancel any ongoing speech
+        window.speechSynthesis.cancel()
 
-        const audio = new Audio(url)
-        audioRef.current = audio
-        audio.play()
-        setIsPlaying(true)
-        audio.onended = () => setIsPlaying(false)
-        audio.onerror = () => {
+        const utterance = new SpeechSynthesisUtterance(textToSpeak)
+        utterance.lang = langVoiceMap[language] || 'fr-FR'
+        utterance.rate = 0.95
+        utterance.pitch = 1
+
+        // Try to find a matching voice
+        const voices = window.speechSynthesis.getVoices()
+        const targetLang = langVoiceMap[language] || 'fr-FR'
+        const match = voices.find(v => v.lang === targetLang)
+          || voices.find(v => v.lang.startsWith(targetLang.split('-')[0]))
+        if (match) utterance.voice = match
+
+        utterance.onstart = () => setIsPlaying(true)
+        utterance.onend = () => {
           setIsPlaying(false)
+          setAudioBase64(null)
+        }
+        utterance.onerror = () => {
+          setIsPlaying(false)
+          setAudioBase64(null)
           console.error('TTS playback error')
         }
+
+        window.speechSynthesis.speak(utterance)
+        setAudioBase64('playing')  // Mark as active (for UI toggle)
       }
     } catch (err) {
       console.error('TTS generation error:', err)
@@ -701,11 +1046,9 @@ function TTSPlayButton({ text, language }: { text: string; language: string }) {
   }
 
   const handleStop = () => {
-    if (audioRef.current) {
-      audioRef.current.pause()
-      audioRef.current.currentTime = 0
-    }
+    window.speechSynthesis.cancel()
     setIsPlaying(false)
+    setAudioBase64(null)
   }
 
   return (
@@ -1032,9 +1375,9 @@ function ChatView() {
           )}
         </div>
 
-        <div className="flex items-center gap-2.5">
-          {/* Language selector */}
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[13px]"
+        <div className="flex items-center gap-2">
+          {/* Language selector — desktop only */}
+          <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[13px]"
             style={{ background: 'rgba(255,255,255,.06)', border: '1px solid var(--border)' }}>
             <select
               value={user?.language || 'fr'}
@@ -1054,12 +1397,12 @@ function ChatView() {
             {darkMode ? '☀️' : '🌙'}
           </button>
 
-          <button onClick={logout} className="text-[13px] px-3 py-1.5 rounded-lg cursor-pointer transition-colors hover:bg-white/10"
+          <button onClick={logout} className="hidden md:block text-[13px] px-3 py-1.5 rounded-lg cursor-pointer transition-colors hover:bg-white/10"
             style={{ border: '1px solid var(--border)', color: 'var(--foreground)' }}>
             Se déconnecter
           </button>
 
-          <div className="w-[34px] h-[34px] rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
+          <div className="hidden md:flex w-[34px] h-[34px] rounded-full items-center justify-center text-xs font-bold text-white flex-shrink-0"
             style={{ background: 'linear-gradient(135deg, #00c6a7, #00a8e8)' }}>
             {user ? getInitials(user.name) : '?'}
           </div>
@@ -1171,7 +1514,7 @@ function ChatView() {
             )}
           </div>
 
-          {/* User info + logout at bottom */}
+          {/* User info + language + logout at bottom */}
           <div className="pt-3 mt-1" style={{ borderTop: '1px solid var(--border)' }}>
             <div className="flex items-center gap-2.5 mb-2.5">
               <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white"
@@ -1182,6 +1525,21 @@ function ChatView() {
                 <div className="text-sm font-medium truncate" style={{ color: 'var(--foreground)' }}>{user?.name}</div>
                 <div className="text-xs truncate" style={{ color: '#8b949e' }}>{user?.email}</div>
               </div>
+            </div>
+            {/* Language selector in sidebar (always visible, useful on mobile) */}
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[13px] mb-2.5"
+              style={{ background: 'rgba(255,255,255,.06)', border: '1px solid var(--border)' }}>
+              <select
+                value={user?.language || 'fr'}
+                onChange={e => handleChangeLanguage(e.target.value)}
+                className="flex-1 bg-transparent border-none outline-none cursor-pointer"
+                style={{ color: 'var(--foreground)', fontSize: '13px' }}>
+                {LANGUAGES.map(l => (
+                  <option key={l.code} value={l.code} style={{ background: '#161b22', color: '#e6edf3' }}>
+                    {l.flag} {l.label}
+                  </option>
+                ))}
+              </select>
             </div>
             <button onClick={logout}
               className="w-full text-sm py-2 rounded-lg cursor-pointer transition-colors hover:bg-white/10 text-center"
@@ -1194,7 +1552,7 @@ function ChatView() {
         {/* CHAT AREA */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-5 scroll-smooth custom-scrollbar">
+          <div className="flex-1 overflow-y-auto p-3 md:p-5 flex flex-col gap-4 md:gap-5 scroll-smooth custom-scrollbar">
             {!currentConversation || currentConversation.messages.length === 0 ? (
               /* WELCOME */
               <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center px-5">
@@ -1251,7 +1609,7 @@ function ChatView() {
                       </div>
                     )}
                     <div className={msg.role === 'user' ? 'text-right' : ''}>
-                      <div className="max-w-[65%] max-[768px]:max-w-[82%] px-4 py-3 rounded-2xl text-sm leading-relaxed"
+                      <div className="max-w-[85%] md:max-w-[65%] px-3.5 py-2.5 md:px-4 md:py-3 rounded-2xl text-sm leading-relaxed"
                         style={msg.role === 'user'
                           ? { background: 'linear-gradient(135deg, #00c6a7, #00a8e8)', color: '#fff', borderBottomRightRadius: '4px' }
                           : { background: 'var(--card)', border: '1px solid var(--border)', borderBottomLeftRadius: '4px', color: 'var(--foreground)' }
@@ -1327,7 +1685,7 @@ function ChatView() {
           )}
 
           {/* INPUT AREA */}
-          <div className="p-3.5 max-[768px]:p-2.5" style={{ background: 'var(--card)', borderTop: '1px solid var(--border)' }}>
+          <div className="p-2.5 md:p-3.5" style={{ background: 'var(--card)', borderTop: '1px solid var(--border)' }}>
             {/* Recording overlay */}
             {isRecording && (
               <div className="mb-2.5 mx-1 p-3 rounded-xl flex items-center gap-3"
@@ -1451,7 +1809,7 @@ function ChatView() {
             </div>
 
             {/* Voice hint bar */}
-            <div className="flex items-center justify-center gap-1.5 mt-2 text-[10px]" style={{ color: '#484f58' }}>
+            <div className="hidden md:flex items-center justify-center gap-1.5 mt-2 text-[10px]" style={{ color: '#484f58' }}>
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
                 <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
