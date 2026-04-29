@@ -148,7 +148,8 @@ export async function chatWithAI(
   category: string = 'general',
   conversationHistory: ChatMessage[] = []
 ): Promise<string> {
-  const apiKey = process.env.OPENROUTER_API_KEY
+  // Nettoyer la clé : supprimer les espaces parasites (copier-coller Vercel)
+  const apiKey = (process.env.OPENROUTER_API_KEY || '').trim()
 
   // ─── Vérification de la clé API ───
   if (!apiKey) {
