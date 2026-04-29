@@ -16,7 +16,7 @@ export const metadata: Metadata = {
   title: "Sanovia — Assistant Santé IA",
   description: "Sanovia est une intelligence artificielle spécialisée dans les conseils de santé en Côte d'Ivoire. Premiers secours, grossesse, prévention.",
   icons: {
-    icon: "/logo.svg",
+    icon: "/logo.jpeg",
   },
 };
 

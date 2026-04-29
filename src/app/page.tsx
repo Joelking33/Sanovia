@@ -71,7 +71,7 @@ export default function Home() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#0d1117]">
         <div className="text-center">
-          <div className="text-4xl mb-4">🧠</div>
+          <img src="/logo.jpeg" alt="Sanovia" className="w-16 h-16 rounded-2xl mb-4 object-cover" />
           <p className="text-[#8b949e]">Chargement...</p>
         </div>
       </div>
@@ -120,10 +120,7 @@ function LoginView() {
       <div className="w-full max-w-[420px]">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl mb-4"
-            style={{ background: 'linear-gradient(135deg,rgba(0,198,167,.2),rgba(0,168,232,.2))', border: '1px solid rgba(0,198,167,.3)' }}>
-            <span className="text-5xl">🧠</span>
-          </div>
+          <img src="/logo.jpeg" alt="Sanovia" className="w-20 h-20 rounded-2xl mb-4 object-cover" />
           <h1 className="text-3xl font-bold" style={{ background: 'linear-gradient(135deg, #00c6a7, #00a8e8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
             Sanovia
           </h1>
@@ -234,10 +231,7 @@ function RegisterView() {
       <div className="w-full max-w-[420px]">
         {/* Logo */}
         <div className="text-center mb-6">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-3"
-            style={{ background: 'linear-gradient(135deg,rgba(0,198,167,.2),rgba(0,168,232,.2))', border: '1px solid rgba(0,198,167,.3)' }}>
-            <span className="text-4xl">🧠</span>
-          </div>
+          <img src="/logo.jpeg" alt="Sanovia" className="w-16 h-16 rounded-2xl mb-3 object-cover" />
           <h1 className="text-2xl font-bold" style={{ background: 'linear-gradient(135deg, #00c6a7, #00a8e8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
             Créer un compte
           </h1>
@@ -1351,10 +1345,7 @@ function ChatView() {
           </button>
           {/* Logo */}
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-lg"
-              style={{ background: 'linear-gradient(135deg,rgba(0,198,167,.3),rgba(0,168,232,.3))', border: '1px solid rgba(0,198,167,.4)' }}>
-              🧠
-            </div>
+            <img src="/logo.jpeg" alt="Sanovia" className="w-8 h-8 rounded-lg object-cover" />
             <span className="text-base font-bold sanovia-gradient-text">Sanovia</span>
           </div>
           {/* Conversation title in topbar */}
@@ -1556,10 +1547,7 @@ function ChatView() {
             {!currentConversation || currentConversation.messages.length === 0 ? (
               /* WELCOME */
               <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center px-5">
-                <div className="w-20 h-20 rounded-2xl flex items-center justify-center text-5xl"
-                  style={{ background: 'linear-gradient(135deg,rgba(0,198,167,.2),rgba(0,168,232,.2))', border: '1px solid rgba(0,198,167,.3)' }}>
-                  🧠
-                </div>
+                <img src="/logo.jpeg" alt="Sanovia" className="w-20 h-20 rounded-2xl object-cover" />
                 <h2 className="text-xl font-bold sanovia-gradient-text">Sanovia</h2>
                 <p className="text-sm max-w-[380px] leading-relaxed" style={{ color: '#8b949e' }}>
                   Bonjour {user?.name?.split(' ')[0]} ! Je suis votre assistant d&apos;information santé.
@@ -1603,10 +1591,7 @@ function ChatView() {
                 return (
                   <div key={msg.id} className={`flex gap-2.5 items-end ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
                     {msg.role === 'assistant' && (
-                      <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-base"
-                        style={{ background: 'linear-gradient(135deg,rgba(0,198,167,.3),rgba(0,168,232,.3))', border: '1px solid rgba(0,198,167,.4)' }}>
-                        🧠
-                      </div>
+                      <img src="/logo.jpeg" alt="Sanovia" className="w-8 h-8 rounded-full flex-shrink-0 object-cover" />
                     )}
                     <div className={msg.role === 'user' ? 'text-right' : ''}>
                       <div className="max-w-[85%] md:max-w-[65%] px-3.5 py-2.5 md:px-4 md:py-3 rounded-2xl text-sm leading-relaxed"
@@ -1656,10 +1641,7 @@ function ChatView() {
             {/* Typing / Transcribing indicator */}
             {isSendingMessage && (
               <div className="flex gap-2.5 items-end">
-                <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-base"
-                  style={{ background: 'linear-gradient(135deg,rgba(0,198,167,.3),rgba(0,168,232,.3))', border: '1px solid rgba(0,198,167,.4)' }}>
-                  🧠
-                </div>
+                <img src="/logo.jpeg" alt="Sanovia" className="w-8 h-8 rounded-full flex-shrink-0 object-cover" />
                 <div className="px-4 py-0 rounded-2xl" style={{ background: 'var(--card)', border: '1px solid var(--border)', borderBottomLeftRadius: '4px' }}>
                   <div className="flex gap-1.5 py-3 px-1">
                     <span className="typing-dot" />
@@ -1688,42 +1670,43 @@ function ChatView() {
           <div className="p-2.5 md:p-3.5" style={{ background: 'var(--card)', borderTop: '1px solid var(--border)' }}>
             {/* Recording overlay */}
             {isRecording && (
-              <div className="mb-2.5 mx-1 p-3 rounded-xl flex items-center gap-3"
+              <div className="mb-2.5 mx-1 p-3 rounded-xl flex flex-col gap-2.5"
                 style={{ background: 'rgba(239,68,68,.08)', border: '1px solid rgba(239,68,68,.25)' }}>
-                {/* Animated recording indicator */}
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <div className="recording-pulse-wrapper">
-                    <div className="w-3 h-3 rounded-full bg-[#ef4444] recording-pulse" />
+                {/* Top row: indicator + timer */}
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <div className="recording-pulse-wrapper">
+                      <div className="w-3 h-3 rounded-full bg-[#ef4444] recording-pulse" />
+                    </div>
+                    <span className="text-xs font-semibold text-[#fca5a5]">ENREGISTREMENT</span>
                   </div>
-                  <span className="text-xs font-semibold text-[#fca5a5]">ENREGISTREMENT</span>
+
+                  <div className="flex-1 flex items-center justify-center">
+                    <span className="text-lg font-mono font-bold tracking-wider" style={{ color: '#fca5a5' }}>
+                      {formatDuration(recordingTime)}
+                    </span>
+                  </div>
+
+                  {/* Waveform (hidden on very small screens) */}
+                  <div className="hidden sm:flex items-center gap-[3px] h-6 flex-shrink-0">
+                    {Array.from({ length: 12 }).map((_, i) => (
+                      <div
+                        key={i}
+                        className="w-[3px] rounded-full recording-bar"
+                        style={{
+                          animationDelay: `${i * 0.08}s`,
+                          background: '#ef4444'
+                        }}
+                      />
+                    ))}
+                  </div>
                 </div>
 
-                {/* Live timer */}
-                <div className="flex-1 flex items-center justify-center">
-                  <span className="text-lg font-mono font-bold tracking-wider" style={{ color: '#fca5a5' }}>
-                    {formatDuration(recordingTime)}
-                  </span>
-                </div>
-
-                {/* Live waveform visualization */}
-                <div className="flex items-center gap-[3px] h-6">
-                  {Array.from({ length: 12 }).map((_, i) => (
-                    <div
-                      key={i}
-                      className="w-[3px] rounded-full recording-bar"
-                      style={{
-                        animationDelay: `${i * 0.08}s`,
-                        background: '#ef4444'
-                      }}
-                    />
-                  ))}
-                </div>
-
-                {/* Cancel and Send buttons */}
-                <div className="flex items-center gap-1.5 flex-shrink-0">
+                {/* Bottom row: buttons — always visible on mobile */}
+                <div className="flex items-center justify-end gap-2">
                   <button
                     onClick={cancelRecording}
-                    className="px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-all"
+                    className="px-4 py-2 rounded-lg text-sm font-medium cursor-pointer transition-all"
                     style={{ background: 'rgba(255,255,255,.06)', border: '1px solid var(--border)', color: '#8b949e' }}
                     title="Annuler l'enregistrement">
                     Annuler
@@ -1731,7 +1714,7 @@ function ChatView() {
                   <button
                     onClick={handleVoiceRecorded}
                     disabled={recordingTime < 1}
-                    className="px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all disabled:opacity-30 hover:opacity-90"
+                    className="px-5 py-2 rounded-lg text-sm font-semibold cursor-pointer transition-all disabled:opacity-30 hover:opacity-90"
                     style={{ background: 'linear-gradient(135deg, #00c6a7, #00a8e8)', color: '#fff' }}
                     title="Envoyer le message vocal">
                     Envoyer
