@@ -1,9 +1,17 @@
 // ============================================================
 // SANOovIA - IA via OpenRouter (production Vercel)
+// Supporte le fallback automatique entre plusieurs modèles
 // ============================================================
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions'
-const DEFAULT_MODEL = 'google/gemini-2.0-flash-exp:free'
+
+// Liste de modèles à essayer, par ordre de préférence
+const FALLBACK_MODELS = [
+  'google/gemini-2.0-flash-exp:free',
+  'meta-llama/llama-4-maverick:free',
+  'deepseek/deepseek-chat-v3-0324:free',
+  'google/gemini-2.0-flash-001',
+]
 
 // ============================================================
 // TYPES
@@ -84,35 +92,17 @@ function getSystemPrompt(language: string, category: string): string {
 }
 
 // ============================================================
-// OpenRouter — unique méthode de communication IA
+// OpenRouter avec fallback multi-modèles
 // ============================================================
 
-export async function chatWithAI(
-  userMessage: string,
-  language: string = 'fr',
-  category: string = 'general',
-  conversationHistory: ChatMessage[] = []
-): Promise<string> {
-  const apiKey = process.env.OPENROUTER_API_KEY
-
-  if (!apiKey) {
-    console.error('[Sanoovia AI] OPENROUTER_API_KEY is not set')
-    return 'Je rencontre une difficulté technique. La clé API OpenRouter n\'est pas configurée. Veuillez contacter l\'administrateur.'
-  }
-
-  const model = process.env.OPENROUTER_MODEL || DEFAULT_MODEL
-  const systemPrompt = getSystemPrompt(language, category)
-
-  // Construire les messages : système + historique (20 derniers) + nouveau message
-  const messages: Array<{ role: string; content: string }> = [
-    { role: 'system', content: systemPrompt },
-    ...conversationHistory.slice(-20).map(msg => ({
-      role: msg.role === 'assistant' ? 'assistant' : 'user',
-      content: msg.content
-    })),
-    { role: 'user', content: userMessage }
-  ]
-
+/**
+ * Appelle OpenRouter avec un modèle spécifique
+ */
+async function callOpenRouter(
+  apiKey: string,
+  model: string,
+  messages: Array<{ role: string; content: string }>
+): Promise<{ content: string | null; error: string | null }> {
   try {
     const response = await fetch(OPENROUTER_API_URL, {
       method: 'POST',
@@ -132,21 +122,73 @@ export async function chatWithAI(
 
     if (!response.ok) {
       const errorText = await response.text()
-      console.error('[Sanoovia AI] OpenRouter API error:', response.status, errorText)
-      return 'Je rencontre une difficulté technique. Veuillez réessayer dans un instant.'
+      return { content: null, error: `[${model}] HTTP ${response.status}: ${errorText.slice(0, 300)}` }
     }
 
     const data = await response.json()
     const responseContent = data.choices?.[0]?.message?.content
 
     if (responseContent) {
-      return responseContent
+      return { content: responseContent, error: null }
     }
 
-    console.error('[Sanoovia AI] OpenRouter returned empty response:', JSON.stringify(data).slice(0, 500))
-    return 'Je rencontre une difficulté technique. Veuillez réessayer dans un instant.'
+    return { content: null, error: `[${model}] Réponse vide de l'API` }
+
   } catch (err: any) {
-    console.error('[Sanoovia AI] OpenRouter fetch error:', err?.message || err)
-    return 'Je rencontre une difficulté technique. Veuillez réessayer dans un instant.'
+    return { content: null, error: `[${model}] ${err?.message || 'Erreur réseau'}` }
   }
+}
+
+/**
+ * Fonction principale IA — essaie le modèle configuré, puis les fallbacks
+ */
+export async function chatWithAI(
+  userMessage: string,
+  language: string = 'fr',
+  category: string = 'general',
+  conversationHistory: ChatMessage[] = []
+): Promise<string> {
+  const apiKey = process.env.OPENROUTER_API_KEY
+
+  // ─── Vérification de la clé API ───
+  if (!apiKey) {
+    console.error('[Sanoovia AI] OPENROUTER_API_KEY is not configured in environment variables')
+    return 'Je rencontre une difficulté technique. La configuration serveur est incomplète. Veuillez contacter l\'administrateur.'
+  }
+
+  const customModel = process.env.OPENROUTER_MODEL
+  const systemPrompt = getSystemPrompt(language, category)
+
+  // Construire les messages
+  const messages: Array<{ role: string; content: string }> = [
+    { role: 'system', content: systemPrompt },
+    ...conversationHistory.slice(-20).map(msg => ({
+      role: msg.role === 'assistant' ? 'assistant' : 'user',
+      content: msg.content
+    })),
+    { role: 'user', content: userMessage }
+  ]
+
+  // ─── Essai 1 : Modèle configuré par l'utilisateur ───
+  if (customModel) {
+    console.log(`[Sanoovia AI] Trying custom model: ${customModel}`)
+    const result = await callOpenRouter(apiKey, customModel, messages)
+    if (result.content) return result.content
+    console.warn(`[Sanoovia AI] Custom model failed: ${result.error}`)
+  }
+
+  // ─── Essai 2 à N : Fallback automatique sur les modèles gratuits ───
+  for (const model of FALLBACK_MODELS) {
+    // Skip si c'est le même que le modèle personnalisé (déjà essayé)
+    if (customModel === model) continue
+
+    console.log(`[Sanoovia AI] Trying fallback model: ${model}`)
+    const result = await callOpenRouter(apiKey, model, messages)
+    if (result.content) return result.content
+    console.warn(`[Sanoovia AI] Fallback model ${model} failed: ${result.error}`)
+  }
+
+  // ─── Tous les modèles ont échoué ───
+  console.error('[Sanoovia AI] ALL MODELS FAILED — check OPENROUTER_API_KEY and Vercel logs')
+  return 'Je rencontre une difficulté technique temporaire. Veuillez réessayer dans quelques instants. Si le problème persiste, contactez le support.'
 }
