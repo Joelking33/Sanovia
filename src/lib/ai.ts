@@ -1,17 +1,27 @@
-// Liste de modèles à essayer, par ordre de préférence
-// 1. Gemma 3 27B — Modèle principal, open-source Google, multilingue, fiable
-// 2. Gemini 2.5 Flash — Dernier modèle Google, multilingue, rapide
-// 3. Qwen3 235B — Multilingue natif, excellent en français + langues africaines
-// 4. Mistral Small 3.1 — Français natif, très fiable sur les instructions
-// 5. DeepSeek R1 — Raisonnement exceptionnel pour les questions complexes
-// 6. Gemini 2.0 Flash — Modèle payant stable en dernier recours
+// ============================================================
+// SANOvIA - IA via OpenRouter (version stable production)
+// - Timeout par requête (15s)
+// - Retry automatique sur erreurs temporaires
+// - Fallback sur modèles ultra-stables
+// - Logs détaillés pour debug
+// ============================================================
+
+const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions'
+
+// ─── Configuration ───────────────────────────────────────────
+const TIMEOUT_MS = 15000         // 15 secondes max par requête
+const MAX_RETRIES = 2            // 2 tentatives par modèle
+const RETRY_DELAY_MS = 1000      // 1 seconde entre les retry
+
+// ─── Modèles par ordre de stabilité (testés et éprouvés) ────
+// Seulement des modèles qui existent depuis longtemps et qui
+// sont les moins sujets aux rate limits / suppressions
 const FALLBACK_MODELS = [
-  'google/gemma-3-27b-it:free',
-  'google/gemini-2.5-flash-preview:free',
-  'qwen/qwen3-235b-a22b:free',
-  'mistralai/mistral-small-3.1-24b-instruct:free',
-  'deepseek/deepseek-r1:free',
-  'google/gemini-2.0-flash-001',
+  'google/gemini-2.0-flash-001',                    // Google — le plus stable au monde
+  'meta-llama/llama-4-scout:free',                   // Meta Llama 4 — très fiable
+  'google/gemma-3-27b-it:free',                      // Google Gemma 3 — open source stable
+  'mistralai/mistral-small-3.1-24b-instruct:free',   // Mistral — français natif
+  'qwen/qwen3-32b:free',                             // Qwen léger et rapide
 ]
 
 // ============================================================
@@ -24,7 +34,7 @@ interface ChatMessage {
 }
 
 // ============================================================
-// PROMPT SYSTÈME — VERSION COMPLÈTE
+// PROMPT SYSTÈME
 // ============================================================
 
 const BASE_SYSTEM_PROMPT_FR = `Tu es Sanovia, un assistant d'information santé numérique dédié aux utilisateurs en Côte d'Ivoire.
@@ -93,55 +103,134 @@ function getSystemPrompt(language: string, category: string): string {
 }
 
 // ============================================================
-// OpenRouter avec fallback multi-modèles
+// UTILITAIRES
+// ============================================================
+
+/** Attendre un délai en ms */
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+/** Vérifier si une erreur HTTP est réessayer (temporaire) */
+function isRetryableError(status: number): boolean {
+  return status === 429 || status === 500 || status === 502 || status === 503 || status === 504
+}
+
+// ============================================================
+// APPEL API AVEC TIMEOUT + RETRY
 // ============================================================
 
 /**
- * Appelle OpenRouter avec un modèle spécifique
+ * Appelle un modèle OpenRouter avec :
+ * - Timeout de 15 secondes
+ * - Retry automatique (2 fois) sur erreurs temporaires (429, 5xx)
+ * - Logs détaillés
  */
-async function callOpenRouter(
+async function callModel(
   apiKey: string,
   model: string,
   messages: Array<{ role: string; content: string }>
 ): Promise<{ content: string | null; error: string | null }> {
-  try {
-    const response = await fetch(OPENROUTER_API_URL, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': process.env.APP_URL || 'https://sanovia.vercel.app',
-        'X-Title': 'Sanovia',
-      },
-      body: JSON.stringify({
-        model,
-        messages,
-        temperature: 0.65,
-        max_tokens: 1200,
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS)
+
+    try {
+      console.log(`[Sanoovia AI] ${model} — tentative ${attempt}/${MAX_RETRIES}`)
+
+      const response = await fetch(OPENROUTER_API_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': process.env.APP_URL || 'https://sanovia.vercel.app',
+          'X-Title': 'Sanovia',
+        },
+        body: JSON.stringify({
+          model,
+          messages,
+          temperature: 0.65,
+          max_tokens: 1200,
+        }),
+        signal: controller.signal
       })
-    })
 
-    if (!response.ok) {
-      const errorText = await response.text()
-      return { content: null, error: `[${model}] HTTP ${response.status}: ${errorText.slice(0, 300)}` }
+      clearTimeout(timeoutId)
+
+      // ─── Erreur HTTP ───
+      if (!response.ok) {
+        const status = response.status
+        const errorText = await response.text().catch(() => 'Pas de réponse')
+        const shortError = errorText.slice(0, 200)
+
+        // Erreur de clé API (401/403) — ne pas retry, c'est définitif
+        if (status === 401 || status === 403) {
+          console.error(`[Sanoovia AI] ${model} — Clé API invalide (HTTP ${status})`)
+          return { content: null, error: `CLÉ_API_INVALIDE` }
+        }
+
+        // Erreur retryable → on attend et on réessaie
+        if (isRetryableError(status) && attempt < MAX_RETRIES) {
+          console.warn(`[Sanoovia AI] ${model} — HTTP ${status}, retry dans ${RETRY_DELAY_MS}ms...`)
+          await sleep(RETRY_DELAY_MS * attempt)
+          continue
+        }
+
+        console.warn(`[Sanoovia AI] ${model} — HTTP ${status}: ${shortError}`)
+        return { content: null, error: `HTTP ${status}` }
+      }
+
+      // ─── Réponse OK ───
+      const data = await response.json()
+      const content = data.choices?.[0]?.message?.content
+
+      if (content && content.trim().length > 0) {
+        console.log(`[Sanoovia AI] ✅ ${model} — réponse reçue (${content.length} chars)`)
+        return { content: content.trim(), error: null }
+      }
+
+      // Réponse vide → retry
+      if (attempt < MAX_RETRIES) {
+        console.warn(`[Sanoovia AI] ${model} — réponse vide, retry...`)
+        await sleep(RETRY_DELAY_MS)
+        continue
+      }
+
+      return { content: null, error: 'Réponse vide' }
+
+    } catch (err: any) {
+      clearTimeout(timeoutId)
+
+      // Timeout → retry
+      if (err?.name === 'AbortError') {
+        console.warn(`[Sanoovia AI] ${model} — timeout (${TIMEOUT_MS}ms), tentative ${attempt}/${MAX_RETRIES}`)
+        if (attempt < MAX_RETRIES) {
+          await sleep(RETRY_DELAY_MS)
+          continue
+        }
+        return { content: null, error: 'Timeout' }
+      }
+
+      // Erreur réseau → retry
+      console.warn(`[Sanoovia AI] ${model} — erreur réseau: ${err?.message}`)
+      if (attempt < MAX_RETRIES) {
+        await sleep(RETRY_DELAY_MS)
+        continue
+      }
+      return { content: null, error: err?.message || 'Erreur réseau' }
     }
-
-    const data = await response.json()
-    const responseContent = data.choices?.[0]?.message?.content
-
-    if (responseContent) {
-      return { content: responseContent, error: null }
-    }
-
-    return { content: null, error: `[${model}] Réponse vide de l'API` }
-
-  } catch (err: any) {
-    return { content: null, error: `[${model}] ${err?.message || 'Erreur réseau'}` }
   }
+
+  return { content: null, error: 'Max retries atteint' }
 }
 
+// ============================================================
+// FONCTION PRINCIPALE
+// ============================================================
+
 /**
- * Fonction principale IA — essaie le modèle configuré, puis les fallbacks
+ * Génère une réponse IA en essayant plusieurs modèles.
+ * Si tous échouent, retourne un message d'erreur convivial.
  */
 export async function chatWithAI(
   userMessage: string,
@@ -149,19 +238,16 @@ export async function chatWithAI(
   category: string = 'general',
   conversationHistory: ChatMessage[] = []
 ): Promise<string> {
-  // Nettoyer la clé : supprimer les espaces parasites (copier-coller Vercel)
+  // ─── Vérifier la clé API ───
   const apiKey = (process.env.OPENROUTER_API_KEY || '').trim()
 
-  // ─── Vérification de la clé API ───
-  if (!apiKey) {
-    console.error('[Sanoovia AI] OPENROUTER_API_KEY is not configured in environment variables')
+  if (!apiKey || apiKey.length < 10) {
+    console.error('[Sanoovia AI] ❌ OPENROUTER_API_KEY non configurée ou trop courte')
     return 'Je rencontre une difficulté technique. La configuration serveur est incomplète. Veuillez contacter l\'administrateur.'
   }
 
-  const customModel = process.env.OPENROUTER_MODEL
+  // ─── Préparer les messages ───
   const systemPrompt = getSystemPrompt(language, category)
-
-  // Construire les messages
   const messages: Array<{ role: string; content: string }> = [
     { role: 'system', content: systemPrompt },
     ...conversationHistory.slice(-20).map(msg => ({
@@ -171,26 +257,37 @@ export async function chatWithAI(
     { role: 'user', content: userMessage }
   ]
 
-  // ─── Essai 1 : Modèle configuré par l'utilisateur ───
-  if (customModel) {
-    console.log(`[Sanoovia AI] Trying custom model: ${customModel}`)
-    const result = await callOpenRouter(apiKey, customModel, messages)
-    if (result.content) return result.content
-    console.warn(`[Sanoovia AI] Custom model failed: ${result.error}`)
-  }
+  // ─── Préparer la liste des modèles à essayer ───
+  const customModel = process.env.OPENROUTER_MODEL?.trim()
+  const modelsToTry = [
+    ...(customModel && customModel.length > 0 ? [customModel] : []),
+    ...FALLBACK_MODELS
+  ]
+  // Éliminer les doublons
+  const uniqueModels = [...new Set(modelsToTry)]
 
-  // ─── Essai 2 à N : Fallback automatique sur les modèles gratuits ───
-  for (const model of FALLBACK_MODELS) {
-    // Skip si c'est le même que le modèle personnalisé (déjà essayé)
-    if (customModel === model) continue
+  console.log(`[Sanoovia AI] 🚀 Début — ${uniqueModels.length} modèle(s) disponible(s), message: "${userMessage.slice(0, 50)}..."`)
 
-    console.log(`[Sanoovia AI] Trying fallback model: ${model}`)
-    const result = await callOpenRouter(apiKey, model, messages)
-    if (result.content) return result.content
-    console.warn(`[Sanoovia AI] Fallback model ${model} failed: ${result.error}`)
+  // ─── Essayer chaque modèle ───
+  const errors: string[] = []
+
+  for (const model of uniqueModels) {
+    const result = await callModel(apiKey, model, messages)
+
+    if (result.content) {
+      return result.content
+    }
+
+    errors.push(`${model}: ${result.error}`)
+
+    // Si la clé API est invalide, arrêter immédiatement
+    if (result.error === 'CLÉ_API_INVALIDE') {
+      console.error('[Sanoovia AI] ❌ CLÉ API INVALIDE — vérifiez OPENROUTER_API_KEY sur Vercel')
+      return 'Je rencontre une difficulté technique liée à l\'authentification. Veuillez contacter l\'administrateur.'
+    }
   }
 
   // ─── Tous les modèles ont échoué ───
-  console.error('[Sanoovia AI] ALL MODELS FAILED — check OPENROUTER_API_KEY and Vercel logs')
+  console.error(`[Sanoovia AI] ❌ TOUS LES MODÈLES ONT ÉCHOUÉ:\n${errors.join('\n')}`)
   return 'Je rencontre une difficulté technique temporaire. Veuillez réessayer dans quelques instants. Si le problème persiste, contactez le support.'
 }
