@@ -1,15 +1,16 @@
-// ============================================================
-// SANOovIA - IA via OpenRouter (production Vercel)
-// Supporte le fallback automatique entre plusieurs modèles
-// ============================================================
-
-const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions'
-
 // Liste de modèles à essayer, par ordre de préférence
+// 1. Gemma 3 27B — Modèle principal, open-source Google, multilingue, fiable
+// 2. Gemini 2.5 Flash — Dernier modèle Google, multilingue, rapide
+// 3. Qwen3 235B — Multilingue natif, excellent en français + langues africaines
+// 4. Mistral Small 3.1 — Français natif, très fiable sur les instructions
+// 5. DeepSeek R1 — Raisonnement exceptionnel pour les questions complexes
+// 6. Gemini 2.0 Flash — Modèle payant stable en dernier recours
 const FALLBACK_MODELS = [
-  'google/gemini-2.0-flash-exp:free',
-  'meta-llama/llama-4-maverick:free',
-  'deepseek/deepseek-chat-v3-0324:free',
+  'google/gemma-3-27b-it:free',
+  'google/gemini-2.5-flash-preview:free',
+  'qwen/qwen3-235b-a22b:free',
+  'mistralai/mistral-small-3.1-24b-instruct:free',
+  'deepseek/deepseek-r1:free',
   'google/gemini-2.0-flash-001',
 ]
 
