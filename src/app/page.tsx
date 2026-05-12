@@ -2,34 +2,31 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useAuthStore, useChatStore } from '@/store'
+import { t, LANGUAGES as I18N_LANGUAGES, getLanguageInfo } from '@/lib/i18n'
+import type { Language } from '@/lib/i18n'
 
 // ============================================================
 // NUMÉROS D'URGENCE CI
 // ============================================================
 const URGENCES = [
-  { icon: '🚑', label: 'SAMU / Urgences médicales', num: '185' },
-  { icon: '🔥', label: 'Pompiers', num: '180' },
-  { icon: '👮', label: 'Police secours', num: '111' },
-  { icon: '🏥', label: 'CHU de Treichville', num: '+225 27 21 24 90 00' },
-  { icon: '🏥', label: 'CHU de Cocody', num: '+225 27 22 44 08 20' },
-  { icon: '🏥', label: 'CHU de Yopougon', num: '+225 27 23 46 36 36' },
-  { icon: '🏥', label: 'Clinique Sainte Marie', num: '+225 27 22 44 49 00' },
-  { icon: '☎️', label: 'Centre Anti-Poison', num: '+225 27 21 35 60 20' },
-  { icon: '🧠', label: 'Urgences psychiatriques', num: '+225 27 22 44 23 11' },
-  { icon: '🩸', label: 'Transfusion sanguine', num: '+225 27 22 40 00 91' },
-  { icon: '🚨', label: 'Croix-Rouge CI', num: '+225 27 22 32 31 27' },
-  { icon: '🌡️', label: 'Infoline santé', num: '143' },
+  { icon: '🚑', labelKey: 'urgency.samu', num: '185' },
+  { icon: '🔥', labelKey: 'urgency.firefighters', num: '180' },
+  { icon: '👮', labelKey: 'urgency.police', num: '111' },
+  { icon: '🏥', labelKey: 'urgency.chu_treichville', num: '+225 27 21 24 90 00' },
+  { icon: '🏥', labelKey: 'urgency.chu_cocody', num: '+225 27 22 44 08 20' },
+  { icon: '🏥', labelKey: 'urgency.chu_yopougon', num: '+225 27 23 46 36 36' },
+  { icon: '🏥', labelKey: 'urgency.chu_abidjan', num: '+225 27 22 44 49 00' },
+  { icon: '☎️', labelKey: 'urgency.poison', num: '+225 27 21 35 60 20' },
+  { icon: '🧠', labelKey: 'urgency.psychiatric', num: '+225 27 22 44 23 11' },
+  { icon: '🩸', labelKey: 'urgency.blood', num: '+225 27 22 40 00 91' },
+  { icon: '🚨', labelKey: 'urgency.redcross', num: '+225 27 22 32 31 27' },
+  { icon: '🌡️', labelKey: 'urgency.healthline', num: '143' },
 ]
 
 // ============================================================
 // LANGUES
 // ============================================================
-const LANGUAGES = [
-  { code: 'fr', label: 'Français', flag: '🇫🇷' },
-  { code: 'ba', label: 'Baoulé', flag: '🌍' },
-  { code: 'dy', label: 'Dioula', flag: '🌍' },
-  { code: 'bq', label: 'Bété', flag: '🌍' },
-]
+const LANGUAGES = I18N_LANGUAGES
 
 const LANGUAGE_LABELS: Record<string, string> = {
   fr: 'Français',
@@ -71,8 +68,8 @@ export default function Home() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#0d1117]">
         <div className="text-center">
-          <div className="text-4xl mb-4">🧠</div>
-          <p className="text-[#8b949e]">Chargement...</p>
+          <img src="/logo.jpeg" alt="Sanovia" className="w-16 h-16 rounded-2xl mb-4 object-cover" />
+          <p className="text-[#8b949e]">{t('loading', 'fr')}</p>
         </div>
       </div>
     )
@@ -110,9 +107,9 @@ function LoginView() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
-    if (!email || !password) { setError('Veuillez remplir tous les champs.'); return }
+    if (!email || !password) { setError(t('login.errorEmpty', 'fr')); return }
     const result = await login(email, password)
-    if (!result.success) setError(result.error || 'Erreur de connexion.')
+    if (!result.success) setError(result.error || t('login.errorGeneric', 'fr'))
   }
 
   return (
@@ -120,19 +117,16 @@ function LoginView() {
       <div className="w-full max-w-[420px]">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl mb-4"
-            style={{ background: 'linear-gradient(135deg,rgba(0,198,167,.2),rgba(0,168,232,.2))', border: '1px solid rgba(0,198,167,.3)' }}>
-            <span className="text-5xl">🧠</span>
-          </div>
+          <img src="/logo.jpeg" alt="Sanovia" className="w-20 h-20 rounded-2xl mb-4 object-cover" />
           <h1 className="text-3xl font-bold" style={{ background: 'linear-gradient(135deg, #00c6a7, #00a8e8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
             Sanovia
           </h1>
-          <p className="text-[#8b949e] mt-2 text-sm">Assistant santé intelligent pour la Côte d&apos;Ivoire</p>
+          <p className="text-[#8b949e] mt-2 text-sm">{t('login.subtitle', 'fr')}</p>
         </div>
 
         {/* Form */}
         <div className="rounded-2xl p-7" style={{ background: '#161b22', border: '1px solid #21262d' }}>
-          <h2 className="text-lg font-semibold text-[#e6edf3] mb-6 text-center">Connexion</h2>
+          <h2 className="text-lg font-semibold text-[#e6edf3] mb-6 text-center">{t('login.title', 'fr')}</h2>
 
           {error && (
             <div className="mb-4 p-3 rounded-lg text-sm" style={{ background: 'rgba(239,68,68,.1)', border: '1px solid rgba(239,68,68,.3)', color: '#fca5a5' }}>
@@ -142,7 +136,7 @@ function LoginView() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm text-[#8b949e] mb-1.5">Email</label>
+              <label className="block text-sm text-[#8b949e] mb-1.5">{t('login.email', 'fr')}</label>
               <input type="email" value={email} onChange={e => setEmail(e.target.value)}
                 className="w-full px-3.5 py-2.5 rounded-lg text-sm text-[#e6edf3] placeholder-[#484f58] outline-none transition-colors"
                 style={{ background: '#0d1117', border: '1px solid #21262d' }}
@@ -152,7 +146,7 @@ function LoginView() {
             </div>
 
             <div>
-              <label className="block text-sm text-[#8b949e] mb-1.5">Mot de passe</label>
+              <label className="block text-sm text-[#8b949e] mb-1.5">{t('login.password', 'fr')}</label>
               <div className="relative">
                 <input type={showPassword ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-lg text-sm text-[#e6edf3] placeholder-[#484f58] outline-none transition-colors pr-10"
@@ -176,21 +170,21 @@ function LoginView() {
                   <span className="typing-dot" style={{ background: '#fff' }} />
                   <span className="typing-dot" style={{ background: '#fff' }} />
                 </span>
-              ) : 'Se connecter'}
+              ) : t('login.submit', 'fr')}
             </button>
           </form>
 
           <div className="mt-4 flex items-center justify-between">
             <button onClick={() => setView('forgot-password')} className="text-xs cursor-pointer transition-colors hover:underline" style={{ color: '#8b949e' }}>
-              Mot de passe oublié ?
+              {t('login.forgotPassword', 'fr')}
             </button>
           </div>
 
           <div className="mt-3 text-center">
             <p className="text-sm text-[#8b949e]">
-              Pas encore de compte ?{' '}
+              {t('login.noAccount', 'fr')}{' '}
               <button onClick={() => setView('register')} className="font-semibold" style={{ color: '#00c6a7' }}>
-                Créer un compte
+                {t('login.createAccount', 'fr')}
               </button>
             </p>
           </div>
@@ -198,7 +192,7 @@ function LoginView() {
 
         {/* Disclaimer */}
         <p className="text-center text-xs text-[#484f58] mt-6 px-4">
-          ⚠️ Sanovia est un assistant informatif, pas un médecin. Les informations fournies ne remplacent pas un avis médical professionnel.
+          ⚠️ {t('disclaimer', 'fr')}
         </p>
       </div>
     </div>
@@ -221,12 +215,12 @@ function RegisterView() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
-    if (!name || !email || !password || !confirmPassword) { setError('Veuillez remplir tous les champs.'); return }
-    if (password.length < 8) { setError('Le mot de passe doit contenir au moins 8 caractères.'); return }
-    if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) { setError('Le mot de passe doit contenir au moins une majuscule, une minuscule et un chiffre.'); return }
-    if (password !== confirmPassword) { setError('Les mots de passe ne correspondent pas.'); return }
+    if (!name || !email || !password || !confirmPassword) { setError(t('register.errorEmpty', 'fr')); return }
+    if (password.length < 8) { setError(t('register.errorPasswordLength', 'fr')); return }
+    if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) { setError(t('register.errorPasswordStrength', 'fr')); return }
+    if (password !== confirmPassword) { setError(t('register.errorPasswordMismatch', 'fr')); return }
     const result = await register(email, password, name, language)
-    if (!result.success) setError(result.error || 'Erreur d\'inscription.')
+    if (!result.success) setError(result.error || t('register.errorGeneric', 'fr'))
   }
 
   return (
@@ -234,14 +228,11 @@ function RegisterView() {
       <div className="w-full max-w-[420px]">
         {/* Logo */}
         <div className="text-center mb-6">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-3"
-            style={{ background: 'linear-gradient(135deg,rgba(0,198,167,.2),rgba(0,168,232,.2))', border: '1px solid rgba(0,198,167,.3)' }}>
-            <span className="text-4xl">🧠</span>
-          </div>
+          <img src="/logo.jpeg" alt="Sanovia" className="w-16 h-16 rounded-2xl mb-3 object-cover" />
           <h1 className="text-2xl font-bold" style={{ background: 'linear-gradient(135deg, #00c6a7, #00a8e8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-            Créer un compte
+            {t('register.title', 'fr')}
           </h1>
-          <p className="text-[#8b949e] mt-1 text-sm">Rejoignez Sanovia pour accéder à l&apos;assistant santé</p>
+          <p className="text-[#8b949e] mt-1 text-sm">{t('register.subtitle', 'fr')}</p>
         </div>
 
         {/* Form */}
@@ -254,7 +245,7 @@ function RegisterView() {
 
           <form onSubmit={handleSubmit} className="space-y-3.5">
             <div>
-              <label className="block text-sm text-[#8b949e] mb-1.5">Nom complet</label>
+              <label className="block text-sm text-[#8b949e] mb-1.5">{t('register.name', 'fr')}</label>
               <input type="text" value={name} onChange={e => setName(e.target.value)}
                 className="w-full px-3.5 py-2.5 rounded-lg text-sm text-[#e6edf3] placeholder-[#484f58] outline-none transition-colors"
                 style={{ background: '#0d1117', border: '1px solid #21262d' }}
@@ -264,7 +255,7 @@ function RegisterView() {
             </div>
 
             <div>
-              <label className="block text-sm text-[#8b949e] mb-1.5">Email</label>
+              <label className="block text-sm text-[#8b949e] mb-1.5">{t('login.email', 'fr')}</label>
               <input type="email" value={email} onChange={e => setEmail(e.target.value)}
                 className="w-full px-3.5 py-2.5 rounded-lg text-sm text-[#e6edf3] placeholder-[#484f58] outline-none transition-colors"
                 style={{ background: '#0d1117', border: '1px solid #21262d' }}
@@ -274,14 +265,14 @@ function RegisterView() {
             </div>
 
             <div>
-              <label className="block text-sm text-[#8b949e] mb-1.5">Mot de passe</label>
+              <label className="block text-sm text-[#8b949e] mb-1.5">{t('login.password', 'fr')}</label>
               <div className="relative">
                 <input type={showPassword ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-lg text-sm text-[#e6edf3] placeholder-[#484f58] outline-none transition-colors pr-10"
                   style={{ background: '#0d1117', border: '1px solid #21262d' }}
                   onFocus={e => e.currentTarget.style.borderColor = '#00c6a7'}
                   onBlur={e => e.currentTarget.style.borderColor = '#21262d'}
-                  placeholder="Min. 8 caractères, 1 majuscule, 1 chiffre" />
+                  placeholder={t('register.passwordPlaceholder', 'fr')} />
                 <button type="button" onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8b949e] hover:text-[#e6edf3] text-sm">
                   {showPassword ? '🙈' : '👁️'}
@@ -290,17 +281,17 @@ function RegisterView() {
             </div>
 
             <div>
-              <label className="block text-sm text-[#8b949e] mb-1.5">Confirmer le mot de passe</label>
+              <label className="block text-sm text-[#8b949e] mb-1.5">{t('register.confirmPassword', 'fr')}</label>
               <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)}
                 className="w-full px-3.5 py-2.5 rounded-lg text-sm text-[#e6edf3] placeholder-[#484f58] outline-none transition-colors"
                 style={{ background: '#0d1117', border: '1px solid #21262d' }}
                 onFocus={e => e.currentTarget.style.borderColor = '#00c6a7'}
                 onBlur={e => e.currentTarget.style.borderColor = '#21262d'}
-                placeholder="Confirmez votre mot de passe" />
+                placeholder={t('register.confirmPasswordPlaceholder', 'fr')} />
             </div>
 
             <div>
-              <label className="block text-sm text-[#8b949e] mb-1.5">Langue préférée</label>
+              <label className="block text-sm text-[#8b949e] mb-1.5">{t('register.language', 'fr')}</label>
               <div className="grid grid-cols-2 gap-2">
                 {LANGUAGES.map(lang => (
                   <button key={lang.code} type="button" onClick={() => setLanguage(lang.code)}
@@ -325,15 +316,15 @@ function RegisterView() {
                   <span className="typing-dot" style={{ background: '#fff' }} />
                   <span className="typing-dot" style={{ background: '#fff' }} />
                 </span>
-              ) : 'Créer mon compte'}
+              ) : t('register.submit', 'fr')}
             </button>
           </form>
 
           <div className="mt-5 text-center">
             <p className="text-sm text-[#8b949e]">
-              Déjà un compte ?{' '}
+              {t('register.hasAccount', 'fr')}{' '}
               <button onClick={() => setView('login')} className="font-semibold" style={{ color: '#00c6a7' }}>
-                Se connecter
+                {t('register.login', 'fr')}
               </button>
             </p>
           </div>
@@ -359,18 +350,18 @@ function ForgotPasswordView() {
     setSuccessMsg('')
     setDevToken(null)
 
-    if (!email) { setError('Veuillez entrer votre adresse email.'); return }
+    if (!email) { setError(t('forgot.errorEmpty', 'fr')); return }
 
     const result = await forgotPassword(email)
     if (result.success) {
-      setSuccessMsg('Si cette adresse email est associée à un compte, un email de réinitialisation a été envoyé. Vérifiez votre boîte de réception (et spam).')
+      setSuccessMsg(t('forgot.success', 'fr'))
       setEmail('')
       // En mode développement, afficher le token
       if (result.devToken) {
         setDevToken(result.devToken)
       }
     } else {
-      setError(result.error || 'Erreur lors de la demande.')
+      setError(result.error || t('forgot.errorGeneric', 'fr'))
     }
   }
 
@@ -393,14 +384,14 @@ function ForgotPasswordView() {
           <h1 className="text-3xl font-bold" style={{ background: 'linear-gradient(135deg, #00c6a7, #00a8e8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
             Sanovia
           </h1>
-          <p className="text-[#8b949e] mt-2 text-sm">Réinitialisation du mot de passe</p>
+          <p className="text-[#8b949e] mt-2 text-sm">{t('forgot.subtitle', 'fr')}</p>
         </div>
 
         {/* Form */}
         <div className="rounded-2xl p-7" style={{ background: '#161b22', border: '1px solid #21262d' }}>
-          <h2 className="text-lg font-semibold text-[#e6edf3] mb-2 text-center">Mot de passe oublié ?</h2>
+          <h2 className="text-lg font-semibold text-[#e6edf3] mb-2 text-center">{t('forgot.title', 'fr')}</h2>
           <p className="text-sm text-[#8b949e] mb-6 text-center leading-relaxed">
-            Entrez l&apos;adresse email associée à votre compte. Nous vous enverrons un lien pour réinitialiser votre mot de passe.
+            {t('forgot.description', 'fr')}
           </p>
 
           {error && (
@@ -425,14 +416,14 @@ function ForgotPasswordView() {
               <button onClick={handleUseToken}
                 className="mt-2 w-full py-2 rounded-lg text-xs font-semibold text-black cursor-pointer transition-opacity hover:opacity-90"
                 style={{ background: 'linear-gradient(135deg, #fbbf24, #f59e0b)' }}>
-                Utiliser ce token pour réinitialiser
+                {t('forgot.useToken', 'fr')}
               </button>
             </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm text-[#8b949e] mb-1.5">Adresse email</label>
+              <label className="block text-sm text-[#8b949e] mb-1.5">{t('forgot.email', 'fr')}</label>
               <input type="email" value={email} onChange={e => setEmail(e.target.value)}
                 className="w-full px-3.5 py-2.5 rounded-lg text-sm text-[#e6edf3] placeholder-[#484f58] outline-none transition-colors"
                 style={{ background: '#0d1117', border: '1px solid #21262d' }}
@@ -450,13 +441,13 @@ function ForgotPasswordView() {
                   <span className="typing-dot" style={{ background: '#fff' }} />
                   <span className="typing-dot" style={{ background: '#fff' }} />
                 </span>
-              ) : 'Envoyer le lien de réinitialisation'}
+              ) : t('forgot.submit', 'fr')}
             </button>
           </form>
 
           <div className="mt-5 text-center">
             <button onClick={() => setView('login')} className="text-sm cursor-pointer transition-colors hover:underline" style={{ color: '#00c6a7' }}>
-              ← Retour à la connexion
+              {t('forgot.backToLogin', 'fr')}
             </button>
           </div>
         </div>
@@ -491,18 +482,18 @@ function ResetPasswordView() {
     e.preventDefault()
     setError('')
 
-    if (!token) { setError('Le token de réinitialisation est requis.'); return }
-    if (!password || !confirmPassword) { setError('Veuillez remplir tous les champs.'); return }
-    if (password.length < 8) { setError('Le mot de passe doit contenir au moins 8 caractères.'); return }
-    if (!/[A-Z]/.test(password)) { setError('Le mot de passe doit contenir au moins une majuscule.'); return }
-    if (!/[0-9]/.test(password)) { setError('Le mot de passe doit contenir au moins un chiffre.'); return }
-    if (password !== confirmPassword) { setError('Les mots de passe ne correspondent pas.'); return }
+    if (!token) { setError(t('reset.errorNoToken', 'fr')); return }
+    if (!password || !confirmPassword) { setError(t('reset.errorEmpty', 'fr')); return }
+    if (password.length < 8) { setError(t('register.errorPasswordLength', 'fr')); return }
+    if (!/[A-Z]/.test(password)) { setError(t('reset.errorPasswordUpper', 'fr')); return }
+    if (!/[0-9]/.test(password)) { setError(t('reset.errorPasswordDigit', 'fr')); return }
+    if (password !== confirmPassword) { setError(t('register.errorPasswordMismatch', 'fr')); return }
 
     const result = await resetPassword(token, password, confirmPassword)
     if (result.success) {
       setIsSuccess(true)
     } else {
-      setError(result.error || 'Erreur lors de la réinitialisation.')
+      setError(result.error || t('reset.errorGeneric', 'fr'))
     }
   }
 
@@ -515,14 +506,14 @@ function ResetPasswordView() {
             style={{ background: 'linear-gradient(135deg,rgba(0,198,167,.2),rgba(0,168,232,.2))', border: '1px solid rgba(0,198,167,.3)' }}>
             <span className="text-5xl">✅</span>
           </div>
-          <h2 className="text-2xl font-bold mb-3" style={{ color: '#e6edf3' }}>Mot de passe mis à jour !</h2>
+          <h2 className="text-2xl font-bold mb-3" style={{ color: '#e6edf3' }}>{t('reset.successTitle', 'fr')}</h2>
           <p className="text-sm mb-8 leading-relaxed" style={{ color: '#8b949e' }}>
-            Votre mot de passe a été modifié avec succès. Vous pouvez maintenant vous connecter avec votre nouveau mot de passe.
+            {t('reset.successMessage', 'fr')}
           </p>
           <button onClick={() => setView('login')}
             className="px-8 py-2.5 rounded-lg text-sm font-semibold text-white cursor-pointer transition-opacity hover:opacity-90"
             style={{ background: 'linear-gradient(135deg, #00c6a7, #00a8e8)' }}>
-            Se connecter
+            {t('reset.loginButton', 'fr')}
           </button>
         </div>
       </div>
@@ -541,14 +532,14 @@ function ResetPasswordView() {
           <h1 className="text-3xl font-bold" style={{ background: 'linear-gradient(135deg, #00c6a7, #00a8e8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
             Sanovia
           </h1>
-          <p className="text-[#8b949e] mt-2 text-sm">Nouveau mot de passe</p>
+          <p className="text-[#8b949e] mt-2 text-sm">{t('reset.subtitle', 'fr')}</p>
         </div>
 
         {/* Form */}
         <div className="rounded-2xl p-7" style={{ background: '#161b22', border: '1px solid #21262d' }}>
-          <h2 className="text-lg font-semibold text-[#e6edf3] mb-2 text-center">Définir un nouveau mot de passe</h2>
+          <h2 className="text-lg font-semibold text-[#e6edf3] mb-2 text-center">{t('reset.title', 'fr')}</h2>
           <p className="text-sm text-[#8b949e] mb-6 text-center leading-relaxed">
-            Créez un mot de passe fort pour sécuriser votre compte Sanovia.
+            {t('reset.description', 'fr')}
           </p>
 
           {error && (
@@ -560,14 +551,14 @@ function ResetPasswordView() {
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Token input (for dev/manual entry) */}
             <div>
-              <label className="block text-sm text-[#8b949e] mb-1.5">Token de réinitialisation</label>
+              <label className="block text-sm text-[#8b949e] mb-1.5">{t('reset.token', 'fr')}</label>
               <input
                 type="text" value={token} onChange={e => setToken(e.target.value)}
                 className="w-full px-3.5 py-2.5 rounded-lg text-xs text-[#e6edf3] placeholder-[#484f58] outline-none transition-colors font-mono"
                 style={{ background: '#0d1117', border: '1px solid #21262d' }}
                 onFocus={e => e.currentTarget.style.borderColor = '#00c6a7'}
                 onBlur={e => e.currentTarget.style.borderColor = '#21262d'}
-                placeholder="Collez le token de réinitialisation ici..."
+                placeholder={t('reset.tokenPlaceholder', 'fr')}
                 readOnly={!!resetToken}
               />
               {resetToken && (
@@ -576,14 +567,14 @@ function ResetPasswordView() {
             </div>
 
             <div>
-              <label className="block text-sm text-[#8b949e] mb-1.5">Nouveau mot de passe</label>
+              <label className="block text-sm text-[#8b949e] mb-1.5">{t('reset.password', 'fr')}</label>
               <div className="relative">
                 <input type={showPassword ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-lg text-sm text-[#e6edf3] placeholder-[#484f58] outline-none transition-colors pr-10"
                   style={{ background: '#0d1117', border: '1px solid #21262d' }}
                   onFocus={e => e.currentTarget.style.borderColor = '#00c6a7'}
                   onBlur={e => e.currentTarget.style.borderColor = '#21262d'}
-                  placeholder="Min. 8 caractères, 1 majuscule, 1 chiffre" />
+                  placeholder={t('register.passwordPlaceholder', 'fr')} />
                 <button type="button" onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8b949e] hover:text-[#e6edf3] text-sm">
                   {showPassword ? '🙈' : '👁️'}
@@ -605,21 +596,21 @@ function ResetPasswordView() {
             </div>
 
             <div>
-              <label className="block text-sm text-[#8b949e] mb-1.5">Confirmer le mot de passe</label>
+              <label className="block text-sm text-[#8b949e] mb-1.5">{t('reset.confirmPassword', 'fr')}</label>
               <div className="relative">
                 <input type={showConfirm ? 'text' : 'password'} value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-lg text-sm text-[#e6edf3] placeholder-[#484f58] outline-none transition-colors pr-10"
                   style={{ background: '#0d1117', border: '1px solid #21262d' }}
                   onFocus={e => e.currentTarget.style.borderColor = '#00c6a7'}
                   onBlur={e => e.currentTarget.style.borderColor = '#21262d'}
-                  placeholder="Confirmez votre nouveau mot de passe" />
+                  placeholder={t('reset.confirmPasswordPlaceholder', 'fr')} />
                 <button type="button" onClick={() => setShowConfirm(!showConfirm)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8b949e] hover:text-[#e6edf3] text-sm">
                   {showConfirm ? '🙈' : '👁️'}
                 </button>
               </div>
               {confirmPassword && password && confirmPassword !== password && (
-                <p className="text-[11px] mt-1" style={{ color: '#ef4444' }}>Les mots de passe ne correspondent pas.</p>
+                <p className="text-[11px] mt-1" style={{ color: '#ef4444' }}>{t('reset.errorMismatch', 'fr')}</p>
               )}
             </div>
 
@@ -632,13 +623,13 @@ function ResetPasswordView() {
                   <span className="typing-dot" style={{ background: '#fff' }} />
                   <span className="typing-dot" style={{ background: '#fff' }} />
                 </span>
-              ) : 'Réinitialiser mon mot de passe'}
+              ) : t('reset.submit', 'fr')}
             </button>
           </form>
 
           <div className="mt-5 text-center">
             <button onClick={() => setView('login')} className="text-sm cursor-pointer transition-colors hover:underline" style={{ color: '#00c6a7' }}>
-              ← Retour à la connexion
+              {t('forgot.backToLogin', 'fr')}
             </button>
           </div>
         </div>
@@ -646,7 +637,7 @@ function ResetPasswordView() {
         {/* Info */}
         <div className="mt-4 p-3 rounded-xl text-xs leading-relaxed"
           style={{ background: 'rgba(0,198,167,.06)', border: '1px solid rgba(0,198,167,.15)', color: '#8b949e' }}>
-          ⏱️ Le lien de réinitialisation expire dans <strong>1 heure</strong>. Si vous n&apos;avez pas reçu l&apos;email, vérifiez vos spams ou refaites une demande.
+          {t('reset.expiry', 'fr')}
         </div>
       </div>
     </div>
@@ -671,15 +662,14 @@ const CATEGORY_CONFIG: Record<string, { icon: string; label: string; color: stri
   grossesse: { icon: '🤰', label: 'Grossesse', color: '#a78bfa' },
 }
 
-function formatDate(dateStr: string): string {
+function formatDate(dateStr: string, lang: Language = 'fr'): string {
   const d = new Date(dateStr)
   const now = new Date()
   const diffMs = now.getTime() - d.getTime()
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
-
-  if (diffDays === 0) return "Aujourd'hui"
-  if (diffDays === 1) return 'Hier'
-  if (diffDays < 7) return `Il y a ${diffDays} jours`
+  if (diffDays === 0) return t('date.today', lang)
+  if (diffDays === 1) return t('date.yesterday', lang)
+  if (diffDays < 7) return t('date.daysAgo', lang, { n: String(diffDays) })
   return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
 }
 
@@ -969,6 +959,7 @@ function VoiceMessagePlayer({ audioBase64, format = 'mp3', role, language }: {
 // TTS PLAY BUTTON (for bot messages)
 // ============================================================
 function TTSPlayButton({ text, language }: { text: string; language: string }) {
+  const lang = (language || 'fr') as Language
   const [isLoading, setIsLoading] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
   const [audioBase64, setAudioBase64] = useState<string | null>(null)
@@ -1059,11 +1050,11 @@ function TTSPlayButton({ text, language }: { text: string; language: string }) {
           disabled={isLoading}
           className="mt-1.5 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium cursor-pointer transition-all hover:opacity-80 disabled:opacity-40"
           style={{ background: 'rgba(0,198,167,.1)', border: '1px solid rgba(0,198,167,.25)', color: '#00c6a7' }}
-          title="Écouter la réponse vocale">
+          title={t('tts.listen', lang)}>
           {isLoading ? (
             <>
               <div className="w-3 h-3 border-[1.5px] rounded-full animate-spin" style={{ borderColor: 'rgba(0,198,167,.3)', borderTopColor: '#00c6a7' }} />
-              Génération...
+              {t('tts.generating', lang)}
             </>
           ) : (
             <>
@@ -1072,7 +1063,7 @@ function TTSPlayButton({ text, language }: { text: string; language: string }) {
                 <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
                 <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
               </svg>
-              Écouter en {LANGUAGE_LABELS[language] || 'Français'}
+              {t('tts.listenIn', lang, { lang: getLanguageInfo(lang).label })}
             </>
           )}
         </button>
@@ -1085,21 +1076,21 @@ function TTSPlayButton({ text, language }: { text: string; language: string }) {
             border: isPlaying ? '1px solid rgba(0,198,167,.4)' : '1px solid rgba(0,198,167,.25)',
             color: '#00c6a7'
           }}
-          title={isPlaying ? 'Arrêter' : 'Écouter'}>
+          title={isPlaying ? t('tts.stop', lang) : t('tts.listen', lang)}>
           {isPlaying ? (
             <>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
                 <rect x="6" y="4" width="4" height="16" rx="1" />
                 <rect x="14" y="4" width="4" height="16" rx="1" />
               </svg>
-              Arrêter
+              {t('tts.stop', lang)}
             </>
           ) : (
             <>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" opacity="0.6">
                 <polygon points="5 3 19 12 5 21 5 3" />
               </svg>
-              Rejouer
+              {t('tts.replay', lang)}
             </>
           )}
         </button>
@@ -1131,6 +1122,8 @@ function ChatView() {
     stopRecording,
     cancelRecording
   } = useVoiceRecorder()
+
+  const currentLang = (user?.language || 'fr') as Language
 
   // Track voice messages for display: { messageId: { audioBase64, format } }
   const [voiceMessages, setVoiceMessages] = useState<Record<string, { audio: string; format: string }>>({})
@@ -1171,7 +1164,7 @@ function ChatView() {
     setTranscriptionError('')
 
     if (!currentConversation) {
-      const conv = await createConversation(text.substring(0, 60) + (text.length > 60 ? '...' : ''), category)
+      const conv = await createConversation(text.substring(0, 60) + (text.length > 60 ? '...' : ''), category, currentLang)
       if (conv) {
         setInputValue('')
         if (inputRef.current) inputRef.current.style.height = 'auto'
@@ -1190,7 +1183,7 @@ function ChatView() {
     try {
       const audioBlob = await stopRecording()
       if (audioBlob.size < 1000) {
-        setTranscriptionError('Enregistrement trop court. Parlez plus longtemps.')
+        setTranscriptionError(t('voice.tooShort', currentLang))
         return
       }
 
@@ -1238,7 +1231,8 @@ function ChatView() {
             if (!currentConversation) {
               const conv = await createConversation(
                 transcribedText.substring(0, 60) + (transcribedText.length > 60 ? '...' : ''),
-                category
+                category,
+                currentLang
               )
               if (conv) {
                 await useChatStore.getState().sendMessage(transcribedText)
@@ -1273,11 +1267,11 @@ function ChatView() {
               }
             }
           } else {
-            setTranscriptionError(data.data?.message || 'Aucune parole détectée. Veuillez réessayer.')
+            setTranscriptionError(data.data?.message || t('voice.noSpeech', currentLang))
           }
         } catch (err) {
           console.error('Transcription error:', err)
-          setTranscriptionError('Erreur lors de la transcription. Vérifiez votre connexion.')
+          setTranscriptionError(t('voice.transcriptionError', currentLang))
         }
 
         setIsTranscribing(false)
@@ -1322,7 +1316,7 @@ function ChatView() {
           style={{ borderRight: '1px solid rgba(255,255,255,.2)' }}>
           <div className="w-[7px] h-[7px] rounded-full bg-[#ef4444] urgence-pulse" />
           <span className="text-[11px] font-bold tracking-wide text-[#fca5a5] uppercase whitespace-nowrap">
-            🚨 Urgences CI
+            🚨 {t('urgency.title', currentLang)}
           </span>
         </div>
         <div className="flex-1 overflow-hidden urgences-mask">
@@ -1330,7 +1324,7 @@ function ChatView() {
             {[...URGENCES, ...URGENCES].map((u, i) => (
               <span key={i} className="inline-flex items-center gap-1.5 mr-6 text-xs text-white whitespace-nowrap px-2.5 py-0.5 rounded-full cursor-default transition-colors"
                 style={{ background: 'rgba(255,255,255,.08)', border: '1px solid rgba(255,255,255,.12)' }}>
-                {u.icon} <span className="text-[#fca5a5] font-semibold">{u.label}</span> —{' '}
+                {u.icon} <span className="text-[#fca5a5] font-semibold">{t(u.labelKey, currentLang)}</span> —{' '}
                 <a href={`tel:${u.num.replace(/\s/g, '')}`} className="text-[#fde68a] font-bold no-underline">{u.num}</a>
               </span>
             ))}
@@ -1351,10 +1345,7 @@ function ChatView() {
           </button>
           {/* Logo */}
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-lg"
-              style={{ background: 'linear-gradient(135deg,rgba(0,198,167,.3),rgba(0,168,232,.3))', border: '1px solid rgba(0,198,167,.4)' }}>
-              🧠
-            </div>
+            <img src="/logo.jpeg" alt="Sanovia" className="w-8 h-8 rounded-lg object-cover" />
             <span className="text-base font-bold sanovia-gradient-text">Sanovia</span>
           </div>
           {/* Conversation title in topbar */}
@@ -1369,7 +1360,7 @@ function ChatView() {
                 color: CATEGORY_CONFIG[currentConversation.category]?.color,
                 fontSize: '10px'
               }}>
-                {CATEGORY_CONFIG[currentConversation.category]?.icon} {CATEGORY_CONFIG[currentConversation.category]?.label}
+                {CATEGORY_CONFIG[currentConversation.category]?.icon} {t('category.' + currentConversation.category, currentLang)}
               </span>
             </div>
           )}
@@ -1399,7 +1390,7 @@ function ChatView() {
 
           <button onClick={logout} className="hidden md:block text-[13px] px-3 py-1.5 rounded-lg cursor-pointer transition-colors hover:bg-white/10"
             style={{ border: '1px solid var(--border)', color: 'var(--foreground)' }}>
-            Se déconnecter
+            {t('chat.logout', currentLang)}
           </button>
 
           <div className="hidden md:flex w-[34px] h-[34px] rounded-full items-center justify-center text-xs font-bold text-white flex-shrink-0"
@@ -1438,7 +1429,7 @@ function ChatView() {
                     color: category === key ? cfg.color : '#8b949e',
                     border: category === key ? `1px solid ${cfg.color}50` : '1px solid transparent'
                   }}>
-                  {cfg.icon}<br />{cfg.label}
+                  {cfg.icon}<br />{t('category.' + key, currentLang)}
                 </button>
               ))}
             </div>
@@ -1447,7 +1438,7 @@ function ChatView() {
             <button onClick={handleNewConv}
               className="w-full flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl text-sm font-semibold text-white cursor-pointer transition-all hover:opacity-90 hover:shadow-lg active:scale-[0.98]"
               style={{ background: 'linear-gradient(135deg, #00c6a7, #00a8e8)' }}>
-              <span className="text-base font-bold">+</span> Nouveau chat
+              <span className="text-base font-bold">+</span> {t('chat.newChat', currentLang)}
             </button>
           </div>
 
@@ -1455,7 +1446,7 @@ function ChatView() {
           <div className="flex items-center gap-2 mb-2">
             <div className="flex-1 h-px" style={{ background: 'var(--border)' }} />
             <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: '#484f58' }}>
-              📋 Historique — {conversations.length}
+              📋 {t('chat.history', currentLang)} {conversations.length}
             </span>
             <div className="flex-1 h-px" style={{ background: 'var(--border)' }} />
           </div>
@@ -1469,7 +1460,7 @@ function ChatView() {
                   💬
                 </div>
                 <p className="text-xs text-center leading-relaxed" style={{ color: '#484f58' }}>
-                  Aucune conversation pour le moment.<br />Commencez par poser une question de santé !
+                  {t('chat.noConversations', currentLang)}
                 </p>
               </div>
             ) : (
@@ -1495,12 +1486,12 @@ function ChatView() {
                         <div className="text-[11px] mt-0.5 truncate" style={{ color: '#484f58' }}>
                           {conv.lastMessage
                             ? (conv.lastMessage.role === 'user' ? '👤 ' : '🧠 ') + conv.lastMessage.content.substring(0, 35) + (conv.lastMessage.content.length > 35 ? '...' : '')
-                            : 'Nouvelle conversation'
+                            : t('chat.newConversation', currentLang)
                           }
                         </div>
                       </div>
                       <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                        <span className="text-[10px]" style={{ color: '#484f58' }}>{formatDate(conv.updatedAt || conv.createdAt)}</span>
+                        <span className="text-[10px]" style={{ color: '#484f58' }}>{formatDate(conv.updatedAt || conv.createdAt, currentLang)}</span>
                         <button onClick={(e) => handleDeleteConv(conv.id, e)}
                           className="opacity-0 group-hover:opacity-100 w-5 h-5 rounded flex items-center justify-center text-[10px] transition-all cursor-pointer hover:bg-red-500/20"
                           style={{ color: '#ef4444' }}>
@@ -1544,7 +1535,7 @@ function ChatView() {
             <button onClick={logout}
               className="w-full text-sm py-2 rounded-lg cursor-pointer transition-colors hover:bg-white/10 text-center"
               style={{ border: '1px solid var(--border)', color: 'var(--foreground)' }}>
-              Se déconnecter
+              {t('chat.logout', currentLang)}
             </button>
           </div>
         </div>
@@ -1556,35 +1547,29 @@ function ChatView() {
             {!currentConversation || currentConversation.messages.length === 0 ? (
               /* WELCOME */
               <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center px-5">
-                <div className="w-20 h-20 rounded-2xl flex items-center justify-center text-5xl"
-                  style={{ background: 'linear-gradient(135deg,rgba(0,198,167,.2),rgba(0,168,232,.2))', border: '1px solid rgba(0,198,167,.3)' }}>
-                  🧠
-                </div>
+                <img src="/logo.jpeg" alt="Sanovia" className="w-20 h-20 rounded-2xl object-cover" />
                 <h2 className="text-xl font-bold sanovia-gradient-text">Sanovia</h2>
-                <p className="text-sm max-w-[380px] leading-relaxed" style={{ color: '#8b949e' }}>
-                  Bonjour {user?.name?.split(' ')[0]} ! Je suis votre assistant d&apos;information santé.
-                  Je peux vous aider sur des questions de santé, de prévention et de bien-être.
+                <p className="text-sm max-w-[380px] leading-relaxed whitespace-pre-line" style={{ color: '#8b949e' }}>
+                  {t('chat.welcome', currentLang, { name: user?.name || '' })}
                 </p>
 
                 {/* Voice feature hint */}
                 <div className="px-4 py-2.5 rounded-xl text-xs leading-relaxed max-w-[400px]"
                   style={{ background: 'rgba(0,198,167,.08)', border: '1px solid rgba(0,198,167,.25)', color: '#00c6a7' }}>
-                  🎤 Vous pouvez aussi m&apos;envoyer des messages vocaux ! Cliquez sur le micro pour enregistrer.
-                  J&apos;écouterai en {LANGUAGE_LABELS[user?.language || 'fr']} et vous répondrai également à voix.
+                  🎤 {t('chat.voiceHint', currentLang, { lang: getLanguageInfo(currentLang).label })}
                 </div>
 
                 <div className="px-4 py-2.5 rounded-xl text-xs leading-relaxed max-w-[400px]"
                   style={{ background: 'rgba(234,179,8,.08)', border: '1px solid rgba(234,179,8,.25)', color: '#fbbf24' }}>
-                  ⚠️ Je ne suis pas un médecin. Ces informations sont à titre éducatif.
-                  Consultez toujours un professionnel de santé pour votre situation personnelle.
+                  ⚠️ {t('chat.disclaimer', currentLang)}
                 </div>
 
                 {/* Quick suggestions */}
                 <div className="flex flex-wrap justify-center gap-2 mt-2 max-w-[500px]">
                   {[
-                    { q: 'Comment traiter une petite brûlure ?', cat: 'premiers_secours' },
-                    { q: 'Signes de grossesse au premier trimestre', cat: 'grossesse' },
-                    { q: 'Symptômes du paludisme', cat: 'general' },
+                    { q: t('chat.suggestion1', currentLang), cat: 'premiers_secours' },
+                    { q: t('chat.suggestion2', currentLang), cat: 'grossesse' },
+                    { q: t('chat.suggestion3', currentLang), cat: 'general' },
                   ].map(s => (
                     <button key={s.q} onClick={() => { setInputValue(s.q); setCategory(s.cat); inputRef.current?.focus() }}
                       className="text-xs px-3 py-2 rounded-lg cursor-pointer transition-colors text-left max-w-[220px]"
@@ -1603,10 +1588,7 @@ function ChatView() {
                 return (
                   <div key={msg.id} className={`flex gap-2.5 items-end ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
                     {msg.role === 'assistant' && (
-                      <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-base"
-                        style={{ background: 'linear-gradient(135deg,rgba(0,198,167,.3),rgba(0,168,232,.3))', border: '1px solid rgba(0,198,167,.4)' }}>
-                        🧠
-                      </div>
+                      <img src="/logo.jpeg" alt="Sanovia" className="w-8 h-8 rounded-full flex-shrink-0 object-cover" />
                     )}
                     <div className={msg.role === 'user' ? 'text-right' : ''}>
                       <div className="max-w-[85%] md:max-w-[65%] px-3.5 py-2.5 md:px-4 md:py-3 rounded-2xl text-sm leading-relaxed"
@@ -1656,10 +1638,7 @@ function ChatView() {
             {/* Typing / Transcribing indicator */}
             {isSendingMessage && (
               <div className="flex gap-2.5 items-end">
-                <div className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-base"
-                  style={{ background: 'linear-gradient(135deg,rgba(0,198,167,.3),rgba(0,168,232,.3))', border: '1px solid rgba(0,198,167,.4)' }}>
-                  🧠
-                </div>
+                <img src="/logo.jpeg" alt="Sanovia" className="w-8 h-8 rounded-full flex-shrink-0 object-cover" />
                 <div className="px-4 py-0 rounded-2xl" style={{ background: 'var(--card)', border: '1px solid var(--border)', borderBottomLeftRadius: '4px' }}>
                   <div className="flex gap-1.5 py-3 px-1">
                     <span className="typing-dot" />
@@ -1696,7 +1675,7 @@ function ChatView() {
                     <div className="recording-pulse-wrapper">
                       <div className="w-3 h-3 rounded-full bg-[#ef4444] recording-pulse" />
                     </div>
-                    <span className="text-xs font-semibold text-[#fca5a5]">ENREGISTREMENT</span>
+                    <span className="text-xs font-semibold text-[#fca5a5]">{t('voice.recording', currentLang)}</span>
                   </div>
 
                   <div className="flex-1 flex items-center justify-center">
@@ -1726,16 +1705,16 @@ function ChatView() {
                     onClick={cancelRecording}
                     className="px-4 py-2 rounded-lg text-sm font-medium cursor-pointer transition-all"
                     style={{ background: 'rgba(255,255,255,.06)', border: '1px solid var(--border)', color: '#8b949e' }}
-                    title="Annuler l'enregistrement">
-                    Annuler
+                    title={t('voice.cancelTooltip', currentLang)}>
+                    {t('voice.cancel', currentLang)}
                   </button>
                   <button
                     onClick={handleVoiceRecorded}
                     disabled={recordingTime < 1}
                     className="px-5 py-2 rounded-lg text-sm font-semibold cursor-pointer transition-all disabled:opacity-30 hover:opacity-90"
                     style={{ background: 'linear-gradient(135deg, #00c6a7, #00a8e8)', color: '#fff' }}
-                    title="Envoyer le message vocal">
-                    Envoyer
+                    title={t('voice.sendTooltip', currentLang)}>
+                    {t('voice.send', currentLang)}
                   </button>
                 </div>
               </div>
@@ -1748,7 +1727,7 @@ function ChatView() {
                 <div className="flex items-center gap-2">
                   <div className="w-4 h-4 border-2 rounded-full animate-spin" style={{ borderColor: 'rgba(0,198,167,.3)', borderTopColor: '#00c6a7' }} />
                   <span className="text-xs font-medium" style={{ color: '#00c6a7' }}>
-                    Transcription en cours en {LANGUAGE_LABELS[user?.language || 'fr']}...
+                    {t('voice.transcribing', currentLang, { lang: getLanguageInfo(currentLang).label })}
                   </span>
                 </div>
                 <div className="flex-1" />
@@ -1774,7 +1753,7 @@ function ChatView() {
                 value={inputValue}
                 onChange={e => { setInputValue(e.target.value); autoResize(e.target) }}
                 onKeyDown={handleKeyDown}
-                placeholder="Posez votre question de santé..."
+                placeholder={t('chat.placeholder', currentLang)}
                 rows={1}
                 className="flex-1 bg-transparent border-none outline-none resize-none max-h-[120px] leading-relaxed py-1 text-sm"
                 style={{ color: 'var(--foreground)' }}
@@ -1787,7 +1766,7 @@ function ChatView() {
                     disabled={isSendingMessage}
                     className="w-9 h-9 rounded-full bg-transparent cursor-pointer transition-all hover:bg-[rgba(0,198,167,.1)] disabled:opacity-35 disabled:cursor-not-allowed group relative"
                     style={{ color: isSendingMessage ? '#484f58' : '#00c6a7' }}
-                    title="Enregistrer un message vocal">
+                    title={t('voice.micTooltip', currentLang)}>
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
                       className="group-hover:scale-110 transition-transform">
                       <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
@@ -1797,7 +1776,7 @@ function ChatView() {
                     {/* Language hint tooltip */}
                     <span className="absolute -top-7 left-1/2 -translate-x-1/2 text-[9px] px-1.5 py-0.5 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
                       style={{ background: 'var(--card)', border: '1px solid var(--border)', color: '#8b949e' }}>
-                      🎤 {LANGUAGE_LABELS[user?.language || 'fr']}
+                      🎤 {getLanguageInfo(currentLang).label}
                     </span>
                   </button>
                 )}
@@ -1815,7 +1794,7 @@ function ChatView() {
                 <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
                 <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
               </svg>
-              <span>Langue vocale : <strong>{LANGUAGE_LABELS[user?.language || 'fr']}</strong> — Changez la langue dans le sélecteur en haut</span>
+              <span>{t('voice.languageHint', currentLang, { lang: getLanguageInfo(currentLang).label })}</span>
             </div>
           </div>
         </div>

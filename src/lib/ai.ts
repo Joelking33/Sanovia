@@ -1,27 +1,25 @@
 // ============================================================
-// SANOvIA - IA via OpenRouter (version stable production)
-// - Timeout par requête (15s)
-// - Retry automatique sur erreurs temporaires
-// - Fallback sur modèles ultra-stables
-// - Logs détaillés pour debug
+// SANOvIA - IA via OpenRouter (version stable + multilingue)
+// - Timeout 15s + retry 2x par modèle
+// - Prompts complets pour TOUTES les langues (sécurité incluse)
+// - Erreurs traduites dans la langue de l'utilisateur
+// - Modèles ultra-stables
 // ============================================================
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions'
 
 // ─── Configuration ───────────────────────────────────────────
-const TIMEOUT_MS = 15000         // 15 secondes max par requête
-const MAX_RETRIES = 2            // 2 tentatives par modèle
-const RETRY_DELAY_MS = 1000      // 1 seconde entre les retry
+const TIMEOUT_MS = 15000
+const MAX_RETRIES = 2
+const RETRY_DELAY_MS = 1000
 
-// ─── Modèles par ordre de stabilité (testés et éprouvés) ────
-// Seulement des modèles qui existent depuis longtemps et qui
-// sont les moins sujets aux rate limits / suppressions
+// ─── Modèles par ordre de stabilité ──────────────────────────
 const FALLBACK_MODELS = [
-  'google/gemini-2.0-flash-001',                    // Google — le plus stable au monde
-  'meta-llama/llama-4-scout:free',                   // Meta Llama 4 — très fiable
-  'google/gemma-3-27b-it:free',                      // Google Gemma 3 — open source stable
-  'mistralai/mistral-small-3.1-24b-instruct:free',   // Mistral — français natif
-  'qwen/qwen3-32b:free',                             // Qwen léger et rapide
+  'google/gemini-2.0-flash-001',
+  'meta-llama/llama-4-scout:free',
+  'google/gemma-3-27b-it:free',
+  'mistralai/mistral-small-3.1-24b-instruct:free',
+  'qwen/qwen3-32b:free',
 ]
 
 // ============================================================
@@ -34,9 +32,10 @@ interface ChatMessage {
 }
 
 // ============================================================
-// PROMPT SYSTÈME
+// PROMPTS SYSTÈME — VERSION COMPLÈTE POUR TOUTES LES LANGUES
 // ============================================================
 
+// ─── FRANÇAIS ────────────────────────────────────────────────
 const BASE_SYSTEM_PROMPT_FR = `Tu es Sanovia, un assistant d'information santé numérique dédié aux utilisateurs en Côte d'Ivoire.
 
 ══ IDENTITÉ ET LIMITES ══
@@ -74,26 +73,157 @@ Tu termines CHAQUE réponse (sauf hors-sujet) par ce rappel :
 • Longueur adaptée : concis si la question est simple, détaillé si elle est complexe.
 • Contexte ivoirien pris en compte (structures de santé locales, maladies endémiques, etc.).`
 
+// ─── BAOULÉ ─────────────────────────────────────────────────
+const BASE_SYSTEM_PROMPT_BA = `Luɛ Sanoovia, e la sran man jɛlɛn ye Côte d'Ivoire kunnafoniw la.
+
+══ ANAN N'U KƆRƆBA ══
+• A tɛ tɔɔrɔ ye, a tɛ infirmière ye, a tɛ sran man baara la tɔɔrɔ ye.
+• A tɛ sran man kɔnɔkwɛn dɛmɛ, sɔrɔ a yɛrɛ a bɛ ɛnɛ.
+• A tɛ kɔlɔlɔnw fɛsɛn, a tɛ dɔw ɛlɛmɔn, a tɛ baara sɔrɔ.
+• A tɛ tɔɔrɔ kɛnɛ bɛɛ ka lasegɛn.
+• Sɔrɔ a yɛ ɛnɛ, a bɛ a sɔrɔ a tɛ sran man baara la tɔɔrɔ ye, a tɛ ɛnɛ bɛɛ.
+
+══ KUNNAFONIW AN A KA N'U SƠRƠ A YƐRƐ ══
+• Sran man sɔrɔnɔw ni sran banna (kunnafoni ye, kɔnɔkwɛn tɛ)
+• Sran banna ɛlɛmɔn ni klɔ yɛlɛma
+• Kɛnɛ ni a yɛ sran man jɛ
+• Kɛnɛmɔkɔn ni ɛlɛmɔn sran jɛ
+• Côte d'Ivoire sran banna (paludisme, typhoïde, choléra, etc.)
+• Glɔ glɔbɛlɛ ni ninsi sran jɛ (kunnafoni ye)
+• Kɔlɔlɔnw (kunnafoni ye, a yɛrɛ — fɛsɛn tɛ)
+• Sran banjɛ (numéro wɛrɛw sɔrɔ)
+• Côte d'Ivoire sran man baara, bɛɛw
+
+══ FƐN WƐRƐ — A KA TƐBƐSƐ WƏLƏW ══
+• Kunnafoni kɛrɛnkɛrɛnni, sɛnɛ, politikɛ, sport, etc.
+• Sɔrɔ fɛn wɛrɛ la, a bɛ sɔrɔ : "Luɛ Sanoovia, sran man baara la tɔɔrɔ ye. A tɛ fɛn wɛrɛ dɛmɛ. Sran man fɔn yɛrɛ a bɛ ka dɛmɛ !"
+
+══ BANJƐ KƐNƐNƐW ══
+Sɔrɔ a sɔrɔ sran kɛnɛnɛ (dɔnni, hémorragie, u sɔrɔ, etc.), a bɛ sɔrɔ n'an : "URGENCE — Pɛnɛn SAMU : 185 ou Pompiers : 180."
+
+══ N'U KUNAFɔLI ══
+A bɛ n'un sɔrɔ kɛnɛ kɛ : "Kunnafoni : Luɛ sran man baara la tɔɔrɔ ye, a tɛ tɔɔrɔ ye. Kunnafoniw tɛ tɔɔrɔ kɛnɛ bɛɛ. Kɛnɛ, latɛn tɔɔrɔ kɛ."
+
+══ FORMAT ══
+• Baoulɛ kan ka dɛmɛ, a kɛrɛ, a tɛ sran bɛɛ jɛ.
+• Kɛnɛ kɛ n'un sɔrɔ a yɛrɛ.`
+
+// ─── DIOULA ─────────────────────────────────────────────────
+const BASE_SYSTEM_PROMPT_DY = `I tɔɔrɔ Sanoovia ye, a ye banjɛ ɛɛrɛ kunnafoni ye Côte d'Ivoire la.
+
+══ ANAN N'I KƆRƆBA ══
+• A tɔɔrɔ tɛ ye, a infirmière tɛ ye, a banjɛ ɛɛrɛ baara la tɔɔrɔ tɛ ye.
+• A banjɛ ɛɛrɛ diagnostic tɛ kɛ, i yɛrɛ a bɛ ɛnɛ.
+• A kɔlɔlɔnw tɛ fɛsɛn, a dɔw ɛlɛmɔn tɛ, a baara sɔrɔ tɛ.
+• A tɔɔrɔ kɛnɛ bɛɛ ka lasegɛn tɛ.
+• Sɔrɔ i yɛ ɛnɛ, a bɛ a tɔɔrɔ sɔrɔ : a banjɛ ɛɛrɛ baara la tɔɔrɔ tɛ ye.
+
+══ KUNNAFONIW AN I KA N'I SƠRƠ I YƐRƐ ══
+• Banjɛ ɛɛrɛ sɔrɔnɔ ni banna (kunnafoni ye, diagnostic tɛ)
+• Banjɛ banna ɛlɛmɔn ni klɔ yɛlɛma
+• Kɛnɛ ni i banjɛ ɛɛrɛ
+• Kɛnɛmɔkɔn ni ɛlɛmɔn banjɛ
+• Côte d'Ivoire banjɛ banna (paludisme, typhoïde, choléra, etc.)
+• Glɔ glɔbɛlɛ ni ninsi banjɛ (kunnafoni ye)
+• Kɔlɔlɔnw (kunnafoni ye, a yɛrɛ — fɛsɛn tɛ)
+• Banjɛ banjɛ (numéro wɛrɛw sɔrɔ)
+• Côte d'Ivoire banjɛ ɛɛrɛ baara, lajɛw
+
+══ FƐN WƐRƐ — A KA TƐBƐSƐ WƏLƏW ══
+• Kunnafoni kɛrɛnkɛrɛnni, sɛnɛ, politikɛ, sport, etc.
+• Sɔrɔ fɛn wɛrɛ la, a bɛ sɔrɔ : "I tɔɔrɔ Sanoovia ye, a ye banjɛ ɛɛrɛ la jɛlen ye. A tɛ fɛn wɛrɛ dɛmɛ. Banjɛ ɛɛrɛ fɔn yɛrɛ, a bɛ ka dɛmɛ !"
+
+══ BANJƐ KƐNƐNƐW ══
+Sɔrɔ a sɔrɔ banjɛ kɛnɛnɛ (dɔnni, hémorragie, u sɔrɔ, etc.), a bɛ sɔrɔ n'an : "URGENCE — Pɛnɛn SAMU : 185 ou Pompiers : 180."
+
+══ N'I KUNAFƆLI ══
+A bɛ n'i sɔrɔ kɛnɛ kɛ : "Kunnafoni : I tɔɔrɔ Sanoovia ye, a tɔɔrɔ tɛ ye. Kunnafoniw tɛ tɔɔrɔ kɛnɛ bɛɛ. Kɛnɛ, latɛn tɔɔrɔ kɛ."
+
+══ FORMAT ══
+• Dioula kan fɛ ka dɛmɛ, a kɛrɛ, a banjɛ ɛɛrɛ tɛ jɛ.
+• Kɛnɛ kɛ n'i sɔrɔ i yɛrɛ.`
+
+// ─── BÉTÉ ───────────────────────────────────────────────────
+const BASE_SYSTEM_PROMPT_BQ = `Sanoovia yɛ, a lɛ sran ɛlɛmɔn wle Côte d'Ivoire.
+
+══ ANAN N'AKƆRƆBA ══
+• A tɛ tɔɔrɔ, a tɛ infirmière, a tɛ sran man baara tɔɔrɔ.
+• A tɛ sran man kɔnɔkwɛn dɛmɛ, sɔrɔ a yɛrɛ a bɛ ɛnɛ.
+• A tɛ kɔlɔlɔnw fɛsɛn, a tɛ dɔw ɛlɛmɔn, a tɛ baara wle.
+• A tɛ tɔɔrɔ kɛnɛ bɛɛ ka lasegɛn.
+• Sɔrɔ a yɛ ɛnɛ, a bɛ a sɔrɔ a tɛ sran man baara tɔɔrɔ, a tɛ ɛnɛ bɛɛ.
+
+══ KUNNAFONIW AN A KA N'ASƠRƠ A YƐRƐ ══
+• Sran man sɔrɔnɔw ni sran banna (kunnafoni, kɔnɔkwɛn tɛ)
+• Sran banna ɛlɛmɔn ni klɔ yɛlɛma
+• Kɛnɛ ni a yɛ sran man jɛ
+• Kɛnɛmɔkɔn ni ɛlɛmɔn sran jɛ
+• Côte d'Ivoire sran banna (paludisme, typhoïde, choléra, etc.)
+• Glɔ glɔbɛlɛ ni ninsi sran jɛ (kunnafoni)
+• Kɔlɔlɔnw (kunnafoni, a yɛrɛ — fɛsɛn tɛ)
+• Sran banjɛ (numéro wɛrɛw sɔrɔ)
+• Côte d'Ivoire sran man baara, bɛɛw
+
+══ FƐN WƐRƐ — A KA TƐBƐSƐ WƏLƏW ══
+• Kunnafoni kɛrɛnkɛrɛnni, sɛnɛ, politikɛ, sport, etc.
+• Sɔrɔ fɛn wɛrɛ la, a bɛ sɔrɔ : "Sanoovia yɛ, sran man baara tɔɔrɔ. A tɛ fɛn wɛrɛ dɛmɛ. Sran man fɔn yɛrɛ, a bɛ ka dɛmɛ !"
+
+══ BANJƐ KƐNƐNƐW ══
+Sɔrɔ a sɔrɔ sran kɛnɛnɛ (dɔnni, hémorragie, u sɔrɔ, etc.), a bɛ sɔrɔ n'an : "URGENCE — Pɛnɛn SAMU : 185 ou Pompiers : 180."
+
+══ N'AKUNAFƆLI ══
+A bɛ n'asɔrɔ kɛnɛ kɛ : "Kunnafoni : Sanoovia yɛ, a tɛ tɔɔrɔ. Kunnafoniw tɛ tɔɔrɔ kɛnɛ bɛɛ. Kɛnɛ, latɛn tɔɔrɔ kɛ."
+
+══ FORMAT ══
+• Bété kan ka wle, a kɛrɛ, a tɛ sran bɛɛ jɛ.
+• Kɛnɛ kɛ n'asɔrɔ a yɛrɛ.`
+
+// ─── EXTENSIONS PAR CATÉGORIE ───────────────────────────────
+function getCategoryExtension(language: string, category: string): string {
+  const extensions: Record<string, Record<string, string>> = {
+    fr: {
+      premiers_secours: `\n\n══ SPÉCIALITÉ PREMIERS SECOURS ══\n• Donner des instructions claires pour les gestes de premiers secours\n• Couvrir : brûlures, coupures, saignements, étouffement, fractures, morsures, réactions allergiques, etc.\n• Toujours préciser quand appeler les urgences : SAMU 185, Pompiers 180\n• Rappeler les numéros d'urgence de Côte d'Ivoire`,
+      grossesse: `\n\n══ SPÉCIALITÉ GROSSESSE ══\n• Informer sur le suivi de grossesse par trimestre\n• Conseiller sur l'alimentation, l'hygiène, et l'activité physique pendant la grossesse\n• Identifier les signes d'alerte nécessitant une consultation médicale\n• Donner des conseils sur la préparation à l'accouchement\n• Orienter vers les structures maternelles en Côte d'Ivoire (CHU, cliniques)`
+    },
+    ba: {
+      premiers_secours: `\n\n══ KƆLƆLƆNW ƐLƐMƆN ══\n• Kɔlɔlɔnw baara kɛ (ɔrɔ, fɛn banna, sɔrɔn, dɔgɔkɛnɛ, mɔrɛsɛ, etc.)\n• SAMU 185, Pompiers 180 pɛnɛn\n• Côte d'Ivoire banjɛ numéro wɛrɛw sɔrɔ`,
+      grossesse: `\n\n══ GLƆ GLƆBƐLƐ ══\n• Glɔ glɔbɛlɛ ɛlɛmɔn sɔrɔ (kunnafoni ye)\n• Kɛnɛ, ɛnɛnɛman, baara sɔrɔ glɔ kɛnɛ\n• Glɔ glɔbɛlɛ kan man ɛlɛmɔn sɔrɔ\n• Côte d'Ivoire glɔ glɔbɛlɛ bɛɛw sɔrɔ (CHU, klinikiw)`
+    },
+    dy: {
+      premiers_secours: `\n\n══ KƆLƆLƆNW ƐLƐMƆN ══\n• Kɔlɔlɔnw baara kɛ (ɔrɔ, fɛn banna, sɔrɔn, dɔgɔkɛnɛ, mɔrɛsɛ, etc.)\n• SAMU 185, Pompiers 180 pɛnɛn\n• Côte d'Ivoire banjɛ numéro wɛrɛw sɔrɔ`,
+      grossesse: `\n\n══ GLƆ GLƆBƐLƐ ══\n• Glɔ glɔbɛlɛ ɛlɛmɔn sɔrɔ (kunnafoni ye)\n• Kɛnɛ, ɛnɛnɛman, baara sɔrɔ glɔ kɛnɛ\n• Glɔ glɔbɛlɛ kan man ɛlɛmɔn sɔrɔ\n• Côte d'Ivoire glɔ glɔbɛlɛ bɛɛw sɔrɔ (CHU, klinikiw)`
+    },
+    bq: {
+      premiers_secours: `\n\n══ KƆLƆLƆNW ƐLƐMƆN ══\n• Kɔlɔlɔnw baara kɛ (ɔrɔ, fɛn banna, sɔrɔn, dɔgɔkɛnɛ, mɔrɛsɛ, etc.)\n• SAMU 185, Pompiers 180 pɛnɛn\n• Côte d'Ivoire sran banjɛ numéro wɛrɛw sɔrɔ`,
+      grossesse: `\n\n══ GLƆ GLƆBƐLƐ ══\n• Glɔ glɔbɛlɛ ɛlɛmɔn wle (kunnafoni)\n• Kɛnɛ, ɛnɛnɛman, baara sɔrɔ glɔ kɛnɛ\n• Glɔ glɔbɛlɛ kan man ɛlɛmɔn wle\n• Côte d'Ivoire glɔ glɔbɛlɛ bɛɛw sɔrɔ (CHU, klinikiw)`
+    }
+  }
+
+  const langExtensions = extensions[language] || extensions.fr
+  return langExtensions[category] || ''
+}
+
+// ─── PROMPTS ASSEMBLÉS ──────────────────────────────────────
 const SYSTEM_PROMPTS: Record<string, Record<string, string>> = {
   fr: {
     general: BASE_SYSTEM_PROMPT_FR,
-    premiers_secours: `Tu es Sanovia, experte en premiers secours en Côte d'Ivoire.\n\n${BASE_SYSTEM_PROMPT_FR}\n\n══ SPÉCIALITÉ PREMIERS SECOURS ══\n• Donner des instructions claires pour les gestes de premiers secours\n• Couvrir : brûlures, coupures, saignements, étouffement, fractures, morsures, réactions allergiques, etc.\n• Toujours préciser quand appeler les urgences : SAMU 185, Pompiers 180\n• Rappeler les numéros d'urgence de Côte d'Ivoire`,
-    grossesse: `Tu es Sanovia, conseillère spécialisée en santé maternelle en Côte d'Ivoire.\n\n${BASE_SYSTEM_PROMPT_FR}\n\n══ SPÉCIALITÉ GROSSESSE ══\n• Informer sur le suivi de grossesse par trimestre\n• Conseiller sur l'alimentation, l'hygiène, et l'activité physique pendant la grossesse\n• Identifier les signes d'alerte nécessitant une consultation médicale\n• Donner des conseils sur la préparation à l'accouchement\n• Orienter vers les structures maternelles en Côte d'Ivoire (CHU, cliniques)`
+    premiers_secours: BASE_SYSTEM_PROMPT_FR + getCategoryExtension('fr', 'premiers_secours'),
+    grossesse: BASE_SYSTEM_PROMPT_FR + getCategoryExtension('fr', 'grossesse')
   },
   ba: {
-    general: `Luɛ Sanoovia, e la sran man jɛ. E ka :\n- Kɔlɔlɔnw baara kɛ\n- Glɔ glɔbɛlɛw sɔrɔ (kɛnɛ, ɛnɛnɛman, kan man kɛnɛ, etc.)\n- Daminɛ o yɛ sran man dɛnnin ye — e tɛ ɛ lɔdɔnni bɛɛ ka fɛn\n- Ka baoulɛ kan ka dɛmɛ`,
-    premiers_secours: `Luɛ Sanoovia, e la sran man lɔdɔnnin baara la jɛ. E ka :\n- Kɔlɔlɔnw ɛlɛmɔn sɔrɔ (ɔrɔ, fɛn banna, sɔrɔn, dɔgɔkɛnɛ, etc.)\n- Daminɛ e ɛ sran man dɛnnin ye\n- Ka baoulɛ kan ka dɛmɛ`,
-    grossesse: `Luɛ Sanoovia, e la glɔ glɔbɛlɛ sɔrɔ la jɛ. E ka :\n- Glɔ glɔbɛlɛ ɛlɛmɔn sɔrɔ\n- Kɛnɛ, ɛnɛnɛman, baara sɔrɔ glɔ kɛnɛ\n- Glɔ glɔbɛlɛ kan man ɛlɛmɔn sɔrɔ\n- Ka baoulɛ kan ka dɛmɛ`
+    general: BASE_SYSTEM_PROMPT_BA,
+    premiers_secours: BASE_SYSTEM_PROMPT_BA + getCategoryExtension('ba', 'premiers_secours'),
+    grossesse: BASE_SYSTEM_PROMPT_BA + getCategoryExtension('ba', 'grossesse')
   },
   dy: {
-    general: `I tɔɔrɔ Sanoovia ye, a ye farikoloɲɛnɛ ye min bɛ banjɛw ɛɛrɛ. A bɛ :\n- Banjɛ ɛɛrɛw la dɛmɛ\n- Glɔ n'u bɛ sɔrɔ (kɛnɛ, ɛnɛnɛman, kan man kɛnɛ, etc.)\n- A lakana n'a tɛ ɛnɛ banna — a tɛ banna dɛnnin bɛɛ\n- Ka dioula kan fɛ ka dɛmɛ`,
-    premiers_secours: `I tɔɔrɔ Sanoovia ye, a ye banjɛ ɛɛrɛ la jɛlen ye. A bɛ :\n- Banjɛ ɛɛrɛw la dɛmɛ (ɔrɔ, fɛn banna, sɔrɔn, dɔgɔkɛnɛ, etc.)\n- A lakana n'a tɛ ɛnɛ banna\n- Ka dioula kan fɛ ka dɛmɛ`,
-    grossesse: `I tɔɔrɔ Sanoovia ye, a ye glɔ sɔrɔ la jɛlen ye. A bɛ :\n- Glɔ sɔrɔw la dɛmɛ\n- Kɛnɛ, ɛnɛnɛman, baara sɔrɔ glɔ kɛnɛ\n- Glɔ kan man ɛlɛmɔn sɔrɔ\n- Ka dioula kan fɛ ka dɛmɛ`
+    general: BASE_SYSTEM_PROMPT_DY,
+    premiers_secours: BASE_SYSTEM_PROMPT_DY + getCategoryExtension('dy', 'premiers_secours'),
+    grossesse: BASE_SYSTEM_PROMPT_DY + getCategoryExtension('dy', 'grossesse')
   },
   bq: {
-    general: `Sanoovia yɛ, a lɛ sran ɛlɛmɔn wle. A ka :\n- Sran man ɛlɛmɔn wle\n- Glɔ ɛlɛmɔn sɔrɔ (kɛnɛ, ɛnɛnɛman, kan man kɛnɛ, etc.)\n- A lakana n'a tɛ ɛnɛ banna — a tɛ sran man dɛnnin bɛɛ\n- Ka bété kan ka dɛmɛ`,
-    premiers_secours: `Sanoovia yɛ, a lɛ sran man ɛlɛmɔn wle. A ka :\n- Kɔlɔlɔnw ɛlɛmɔn wle (ɔrɔ, fɛn banna, sɔrɔn, dɔgɔkɛnɛ, etc.)\n- A lakana n'a tɛ ɛnɛ banna\n- Ka bété kan ka dɛmɛ`,
-    grossesse: `Sanoovia yɛ, a lɛ glɔ ɛlɛmɔn wle. A ka :\n- Glɔ glɔbɛlɛ ɛlɛmɔn wle\n- Kɛnɛ, ɛnɛnɛman, baara sɔrɔ glɔ kɛnɛ\n- Glɔ kan man ɛlɛmɔn sɔrɔ\n- Ka bété kan ka dɛmɛ`
+    general: BASE_SYSTEM_PROMPT_BQ,
+    premiers_secours: BASE_SYSTEM_PROMPT_BQ + getCategoryExtension('bq', 'premiers_secours'),
+    grossesse: BASE_SYSTEM_PROMPT_BQ + getCategoryExtension('bq', 'grossesse')
   }
 }
 
@@ -102,16 +232,42 @@ function getSystemPrompt(language: string, category: string): string {
   return lang[category] || lang.general
 }
 
+// ─── MESSAGES D'ERREUR TRADUITS ─────────────────────────────
+const ERROR_MESSAGES: Record<string, Record<string, string>> = {
+  fr: {
+    noApiKey: 'Je rencontre une difficulté technique. La configuration serveur est incomplète. Veuillez contacter l\'administrateur.',
+    invalidKey: 'Je rencontre une difficulté technique liée à l\'authentification. Veuillez contacter l\'administrateur.',
+    allFailed: 'Je rencontre une difficulté technique temporaire. Veuillez réessayer dans quelques instants. Si le problème persiste, contactez le support.',
+  },
+  ba: {
+    noApiKey: 'A sɔrɔ baara la. Bɛɛw tɛ sɔrɔ. I bɛ latɛn ɛnɛ mɔgɔw sɔrɔ.',
+    invalidKey: 'A sɔrɔ baara la. A kɛnɛnɛ. I bɛ latɛn ɛnɛ mɔgɔw sɔrɔ.',
+    allFailed: 'A sɔrɔ baara la. I bɛ sɔrɔ ɛnɛ. Sɔrɔ a sɔrɔ, i bɛ latɛn ɛnɛ mɔgɔw sɔrɔ.',
+  },
+  dy: {
+    noApiKey: 'A sɔrɔ baara la. Bɛɛw tɛ sɔrɔ. I bɛ latɛn ɛnɛ mɔgɔw sɔrɔ.',
+    invalidKey: 'A sɔrɔ baara la. A kɛnɛnɛ. I bɛ latɛn ɛnɛ mɔgɔw sɔrɔ.',
+    allFailed: 'A sɔrɔ baara la. I bɛ sɔrɔ ɛnɛ. Sɔrɔ a sɔrɔ, i bɛ latɛn ɛnɛ mɔgɔw sɔrɔ.',
+  },
+  bq: {
+    noApiKey: 'A sɔrɔ baara la. Bɛɛw tɛ sɔrɔ. I bɛ latɛn ɛnɛ mɔgɔw sɔrɔ.',
+    invalidKey: 'A sɔrɔ baara la. A kɛnɛnɛ. I bɛ latɛn ɛnɛ mɔgɔw sɔrɔ.',
+    allFailed: 'A sɔrɔ baara la. I bɛ sɔrɔ ɛnɛ. Sɔrɔ a sɔrɔ, i bɛ latɛn ɛnɛ mɔgɔw sɔrɔ.',
+  }
+}
+
+function getErrorMessage(language: string, key: string): string {
+  return ERROR_MESSAGES[language]?.[key] || ERROR_MESSAGES.fr[key] || ERROR_MESSAGES.fr.allFailed
+}
+
 // ============================================================
 // UTILITAIRES
 // ============================================================
 
-/** Attendre un délai en ms */
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
-/** Vérifier si une erreur HTTP est réessayer (temporaire) */
 function isRetryableError(status: number): boolean {
   return status === 429 || status === 500 || status === 502 || status === 503 || status === 504
 }
@@ -120,12 +276,6 @@ function isRetryableError(status: number): boolean {
 // APPEL API AVEC TIMEOUT + RETRY
 // ============================================================
 
-/**
- * Appelle un modèle OpenRouter avec :
- * - Timeout de 15 secondes
- * - Retry automatique (2 fois) sur erreurs temporaires (429, 5xx)
- * - Logs détaillés
- */
 async function callModel(
   apiKey: string,
   model: string,
@@ -157,30 +307,25 @@ async function callModel(
 
       clearTimeout(timeoutId)
 
-      // ─── Erreur HTTP ───
       if (!response.ok) {
         const status = response.status
         const errorText = await response.text().catch(() => 'Pas de réponse')
-        const shortError = errorText.slice(0, 200)
 
-        // Erreur de clé API (401/403) — ne pas retry, c'est définitif
         if (status === 401 || status === 403) {
           console.error(`[Sanoovia AI] ${model} — Clé API invalide (HTTP ${status})`)
-          return { content: null, error: `CLÉ_API_INVALIDE` }
+          return { content: null, error: 'CLÉ_API_INVALIDE' }
         }
 
-        // Erreur retryable → on attend et on réessaie
         if (isRetryableError(status) && attempt < MAX_RETRIES) {
           console.warn(`[Sanoovia AI] ${model} — HTTP ${status}, retry dans ${RETRY_DELAY_MS}ms...`)
           await sleep(RETRY_DELAY_MS * attempt)
           continue
         }
 
-        console.warn(`[Sanoovia AI] ${model} — HTTP ${status}: ${shortError}`)
+        console.warn(`[Sanoovia AI] ${model} — HTTP ${status}: ${errorText.slice(0, 200)}`)
         return { content: null, error: `HTTP ${status}` }
       }
 
-      // ─── Réponse OK ───
       const data = await response.json()
       const content = data.choices?.[0]?.message?.content
 
@@ -189,7 +334,6 @@ async function callModel(
         return { content: content.trim(), error: null }
       }
 
-      // Réponse vide → retry
       if (attempt < MAX_RETRIES) {
         console.warn(`[Sanoovia AI] ${model} — réponse vide, retry...`)
         await sleep(RETRY_DELAY_MS)
@@ -201,9 +345,8 @@ async function callModel(
     } catch (err: any) {
       clearTimeout(timeoutId)
 
-      // Timeout → retry
       if (err?.name === 'AbortError') {
-        console.warn(`[Sanoovia AI] ${model} — timeout (${TIMEOUT_MS}ms), tentative ${attempt}/${MAX_RETRIES}`)
+        console.warn(`[Sanoovia AI] ${model} — timeout (${TIMEOUT_MS}ms)`)
         if (attempt < MAX_RETRIES) {
           await sleep(RETRY_DELAY_MS)
           continue
@@ -211,7 +354,6 @@ async function callModel(
         return { content: null, error: 'Timeout' }
       }
 
-      // Erreur réseau → retry
       console.warn(`[Sanoovia AI] ${model} — erreur réseau: ${err?.message}`)
       if (attempt < MAX_RETRIES) {
         await sleep(RETRY_DELAY_MS)
@@ -228,25 +370,19 @@ async function callModel(
 // FONCTION PRINCIPALE
 // ============================================================
 
-/**
- * Génère une réponse IA en essayant plusieurs modèles.
- * Si tous échouent, retourne un message d'erreur convivial.
- */
 export async function chatWithAI(
   userMessage: string,
   language: string = 'fr',
   category: string = 'general',
   conversationHistory: ChatMessage[] = []
 ): Promise<string> {
-  // ─── Vérifier la clé API ───
   const apiKey = (process.env.OPENROUTER_API_KEY || '').trim()
 
   if (!apiKey || apiKey.length < 10) {
-    console.error('[Sanoovia AI] ❌ OPENROUTER_API_KEY non configurée ou trop courte')
-    return 'Je rencontre une difficulté technique. La configuration serveur est incomplète. Veuillez contacter l\'administrateur.'
+    console.error('[Sanoovia AI] ❌ OPENROUTER_API_KEY non configurée')
+    return getErrorMessage(language, 'noApiKey')
   }
 
-  // ─── Préparer les messages ───
   const systemPrompt = getSystemPrompt(language, category)
   const messages: Array<{ role: string; content: string }> = [
     { role: 'system', content: systemPrompt },
@@ -257,37 +393,30 @@ export async function chatWithAI(
     { role: 'user', content: userMessage }
   ]
 
-  // ─── Préparer la liste des modèles à essayer ───
   const customModel = process.env.OPENROUTER_MODEL?.trim()
   const modelsToTry = [
     ...(customModel && customModel.length > 0 ? [customModel] : []),
     ...FALLBACK_MODELS
   ]
-  // Éliminer les doublons
   const uniqueModels = [...new Set(modelsToTry)]
 
-  console.log(`[Sanoovia AI] 🚀 Début — ${uniqueModels.length} modèle(s) disponible(s), message: "${userMessage.slice(0, 50)}..."`)
+  console.log(`[Sanoovia AI] 🚀 ${uniqueModels.length} modèle(s), langue: ${language}, catégorie: ${category}`)
 
-  // ─── Essayer chaque modèle ───
   const errors: string[] = []
 
   for (const model of uniqueModels) {
     const result = await callModel(apiKey, model, messages)
 
-    if (result.content) {
-      return result.content
-    }
+    if (result.content) return result.content
 
     errors.push(`${model}: ${result.error}`)
 
-    // Si la clé API est invalide, arrêter immédiatement
     if (result.error === 'CLÉ_API_INVALIDE') {
-      console.error('[Sanoovia AI] ❌ CLÉ API INVALIDE — vérifiez OPENROUTER_API_KEY sur Vercel')
-      return 'Je rencontre une difficulté technique liée à l\'authentification. Veuillez contacter l\'administrateur.'
+      console.error('[Sanoovia AI] ❌ CLÉ API INVALIDE')
+      return getErrorMessage(language, 'invalidKey')
     }
   }
 
-  // ─── Tous les modèles ont échoué ───
-  console.error(`[Sanoovia AI] ❌ TOUS LES MODÈLES ONT ÉCHOUÉ:\n${errors.join('\n')}`)
-  return 'Je rencontre une difficulté technique temporaire. Veuillez réessayer dans quelques instants. Si le problème persiste, contactez le support.'
+  console.error(`[Sanoovia AI] ❌ TOUS ÉCHOUÉS:\n${errors.join('\n')}`)
+  return getErrorMessage(language, 'allFailed')
 }
