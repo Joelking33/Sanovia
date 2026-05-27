@@ -1104,7 +1104,7 @@ function TTSPlayButton({ text, language }: { text: string; language: string }) {
 // ============================================================
 function ChatView() {
   const { user, logout } = useAuthStore()
-  const { conversations, currentConversation, fetchConversations, createConversation, selectConversation, sendMessage, deleteConversation, clearCurrent, isSendingMessage, isLoadingMessages } = useChatStore()
+  const { conversations, currentConversation, fetchConversations, createConversation, selectConversation, sendMessage, deleteConversation, clearCurrent, isSendingMessage, isLoadingMessages, sendError, clearSendError } = useChatStore()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [darkMode, setDarkMode] = useState(true)
   const [inputValue, setInputValue] = useState('')
@@ -1162,20 +1162,27 @@ function ChatView() {
     const text = inputValue.trim()
     if (!text || isSendingMessage) return
     setTranscriptionError('')
+    clearSendError()
 
     if (!currentConversation) {
       const conv = await createConversation(text.substring(0, 60) + (text.length > 60 ? '...' : ''), category, currentLang)
       if (conv) {
         setInputValue('')
         if (inputRef.current) inputRef.current.style.height = 'auto'
-        useChatStore.getState().sendMessage(text)
+        const success = await useChatStore.getState().sendMessage(text)
+        if (!success) {
+          // sendMessage already shows toast + error message in chat
+        }
       }
       return
     }
 
     setInputValue('')
     if (inputRef.current) inputRef.current.style.height = 'auto'
-    await sendMessage(text)
+    const success = await sendMessage(text)
+    if (!success) {
+      // Error already handled by store (toast + inline error message)
+    }
   }
 
   // Handle voice recording completion
@@ -1582,6 +1589,47 @@ function ChatView() {
             ) : (
               /* MESSAGE LIST */
               currentConversation.messages.map(msg => {
+                // Error message — alerte rouge claire dans le chat
+                if (msg.role === 'error') {
+                  return (
+                    <div key={msg.id} className="flex justify-center">
+                      <div className="max-w-[85%] md:max-w-[70%] w-full px-4 py-3 rounded-2xl text-sm"
+                        style={{
+                          background: 'rgba(239,68,68,.1)',
+                          border: '1px solid rgba(239,68,68,.3)',
+                          color: '#fca5a5',
+                          borderBottomLeftRadius: '4px',
+                          borderBottomRightRadius: '4px',
+                        }}>
+                        <div className="flex items-start gap-2.5">
+                          <span className="text-base flex-shrink-0 mt-0.5">⚠️</span>
+                          <div className="flex-1">
+                            <div className="font-semibold text-xs mb-1" style={{ color: '#f87171' }}>Erreur</div>
+                            <div className="text-xs leading-relaxed opacity-90 whitespace-pre-wrap">{msg.content}</div>
+                            <button onClick={clearSendError}
+                              className="mt-2 text-xs px-3 py-1 rounded-lg cursor-pointer transition-opacity hover:opacity-100 opacity-70"
+                              style={{ background: 'rgba(239,68,68,.15)', color: '#fca5a5', border: '1px solid rgba(239,68,68,.25)' }}>
+                              Réessayer
+                            </button>
+                          </div>
+                          <button onClick={() => {
+                            // Remove this error message from the conversation
+                            const conv = useChatStore.getState().currentConversation
+                            if (conv) {
+                              useChatStore.setState({
+                                currentConversation: {
+                                  ...conv,
+                                  messages: conv.messages.filter(m => m.id !== msg.id)
+                                }
+                              })
+                            }
+                          }} className="cursor-pointer opacity-50 hover:opacity-100 flex-shrink-0 mt-0.5">✕</button>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                }
+
                 const voiceData = voiceMessages[msg.id]
                 const isVoiceMessage = !!voiceData
 

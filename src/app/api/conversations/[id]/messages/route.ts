@@ -173,6 +173,13 @@ export async function POST(
 
   } catch (err: any) {
     console.error('[Messages POST Error]', err)
-    return error('Erreur lors de l\'envoi du message.')
+    const msg = err?.message || 'Erreur inconnue'
+    if (msg.includes('timeout') || msg.includes('Abort') || msg.includes('ETIMEDOUT')) {
+      return error('Délai dépassé : la réponse de Sanovia a mis trop de temps. Vérifiez votre connexion et réessayez.', 504)
+    }
+    if (msg.includes('fetch') || msg.includes('network') || msg.includes('ECONNREFUSED') || msg.includes('ENOTFOUND')) {
+      return error('Erreur réseau : impossible de joindre le service IA. Vérifiez votre connexion internet et réessayez.', 503)
+    }
+    return error(`Erreur interne : ${msg}. Réessayez dans quelques instants.`)
   }
 }
