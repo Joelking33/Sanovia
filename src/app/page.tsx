@@ -1669,6 +1669,22 @@ function ChatView() {
                         <TTSPlayButton text={msg.content} language={msg.language} />
                       )}
 
+                      {/* Server metadata badge — montre les infos brutes du serveur */}
+                      {msg.role === 'assistant' && msg.serverMeta && (
+                        <div className="flex items-center gap-2 mt-1.5 px-2 py-1 rounded-lg text-[10px]"
+                          style={{ background: 'rgba(0,198,167,.06)', color: '#484f58' }}>
+                          <span>{msg.serverMeta.source === 'openrouter' ? '⚡' : msg.serverMeta.source === 'gemini' ? '🔮' : msg.serverMeta.source === 'cache' ? '💾' : msg.serverMeta.source === 'offline' ? '📦' : '💬'}</span>
+                          <span>{msg.serverMeta.model}</span>
+                          <span>{msg.serverMeta.duration}ms</span>
+                          {msg.serverMeta.cached && <span className="px-1.5 py-0.5 rounded" style={{ background: 'rgba(0,198,167,.12)', color: '#00c6a7' }}>cache</span>}
+                          {msg.serverMeta.errors.length > 0 && (
+                            <span className="px-1.5 py-0.5 rounded" style={{ background: 'rgba(239,68,68,.12)', color: '#f87171' }}>
+                              {msg.serverMeta.errors.length} err.
+                            </span>
+                          )}
+                        </div>
+                      )}
+
                       <div className="text-[11px] mt-1 flex items-center gap-1.5" style={{ color: '#8b949e' }}>
                         {new Date(msg.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
                         {/* Language badge */}

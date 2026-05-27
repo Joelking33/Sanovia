@@ -1,5 +1,5 @@
 // ============================================================
-// SANOvIA — Moteur IA v7.0
+// SANOvIA — Moteur IA v8.0
 // ═══════════════════════════════════════════════════════════════
 // Architecture :
 //
@@ -50,7 +50,7 @@ const OPENROUTER_MODELS = [
 ]
 
 // ═══════════════════════════════════════════════════════════════
-// 2. TYPES
+// 2. TYPES — Structured responses (v8.0)
 // ═══════════════════════════════════════════════════════════════
 
 interface ChatMessage {
@@ -64,6 +64,73 @@ interface ProviderResult {
   provider: string
   model: string
   duration: number
+}
+
+export interface AIMetadata {
+  provider: string
+  model: string
+  duration: number
+  source: 'openrouter' | 'gemini' | 'cache' | 'greeting' | 'thankyou' | 'identity' | 'offline'
+  cached: boolean
+  openRouterKey: boolean
+  geminiKey: boolean
+  errors: string[]
+  retries: number
+  timestamp: string
+}
+
+export interface AIResponse {
+  content: string
+  metadata: AIMetadata
+}
+
+export class AIError extends Error {
+  code: string
+  provider: string
+  model: string
+  duration: number
+  openRouterKey: boolean
+  geminiKey: boolean
+  errors: string[]
+  timestamp: string
+
+  constructor(
+    message: string,
+    opts: {
+      code?: string
+      provider?: string
+      model?: string
+      duration?: number
+      openRouterKey?: boolean
+      geminiKey?: boolean
+      errors?: string[]
+    } = {}
+  ) {
+    super(message)
+    this.name = 'AIError'
+    this.code = opts.code || 'AI_ERROR'
+    this.provider = opts.provider || 'unknown'
+    this.model = opts.model || 'unknown'
+    this.duration = opts.duration || 0
+    this.openRouterKey = opts.openRouterKey ?? false
+    this.geminiKey = opts.geminiKey ?? false
+    this.errors = opts.errors || []
+    this.timestamp = new Date().toISOString()
+  }
+
+  toJSON() {
+    return {
+      code: this.code,
+      provider: this.provider,
+      model: this.model,
+      duration: this.duration,
+      openRouterKey: this.openRouterKey,
+      geminiKey: this.geminiKey,
+      errors: this.errors,
+      timestamp: this.timestamp,
+      message: this.message,
+    }
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -654,93 +721,229 @@ export async function chatWithAI(
   language: string = 'fr',
   category: string = 'general',
   conversationHistory: ChatMessage[] = []
-): Promise<string> {
+): Promise<AIResponse> {
   const globalStart = Date.now()
   const globalDeadline = globalStart + GLOBAL_TIMEOUT
 
+  const orKey = (process.env.OPENROUTER_API_KEY || '').trim()
+  const geminiKey = (process.env.GOOGLE_AI_API_KEY || '').trim()
+  const hasOrKey = orKey.length >= 10
+  const hasGemKey = geminiKey.length >= 10
+  const hasApiKey = hasOrKey || hasGemKey
+
+  const baseMeta = (overrides: Partial<AIMetadata> & { source: AIMetadata['source'] }): AIMetadata => ({
+    provider: 'local',
+    model: 'n/a',
+    duration: Date.now() - globalStart,
+    cached: false,
+    openRouterKey: hasOrKey,
+    geminiKey: hasGemKey,
+    errors: [],
+    retries: 0,
+    timestamp: new Date.now().toISOString(),
+    ...overrides,
+  })
+
+  // ═══════════════════════════════════════════════════════════
+  // LOG BRUT — Début de traitement
+  // ═══════════════════════════════════════════════════════════
+  console.log('\n' + '='.repeat(70))
+  console.log('[SANOVIA v8.0] NOUVELLE REQUÊTE IA')
+  console.log('='.repeat(70))
+  console.log(`  📥 Message utilisateur  : "${userMessage.slice(0, 120)}${userMessage.length > 120 ? '...' : ''}"`)
+  console.log(`  🌐 Langue             : ${language}`)
+  console.log(`  📂 Catégorie          : ${category}`)
+  console.log(`  📜 Historique         : ${conversationHistory.length} message(s)`)
+  console.log(`  🔑 OPENROUTER_API_KEY : ${hasOrKey ? '✅ configurée (' + orKey.slice(0, 8) + '...)' : '❌ NON configurée'}`)
+  console.log(`  🔑 GOOGLE_AI_API_KEY  : ${hasGemKey ? '✅ configurée (' + geminiKey.slice(0, 8) + '...)' : '❌ NON configurée'}`)
+  console.log(`  ⏱️  Timeout global    : ${GLOBAL_TIMEOUT}ms`)
+  console.log('─'.repeat(70))
+
   // ─── 0. Cache ────────────────────────────────────────────
   const cached = cache.get(userMessage, language)
-  if (cached) return cached
+  if (cached) {
+    const meta = baseMeta({ source: 'cache', cached: true })
+    console.log('[SANOVIA v8.0] ✅ SUCCÈS — Source: CACHE')
+    console.log(`  📦 Contenu : "${cached.slice(0, 100)}${cached.length > 100 ? '...' : ''}"`)
+    console.log(`  ⏱️  Durée   : ${meta.duration}ms`)
+    console.log('='.repeat(70) + '\n')
+    return { content: cached, metadata: meta }
+  }
 
   // ─── 1. Greeting detection (réponse instantanée, humaine) ─
   if (isGreeting(userMessage)) {
     const greeting = getGreetingResponse(language)
-    console.log(`[Sanovia v7] 💬 Greeting détecté — réponse instantanée (${Date.now() - globalStart}ms)`)
-    return greeting
+    const meta = baseMeta({ source: 'greeting' })
+    console.log('[SANOVIA v8.0] ✅ SUCCÈS — Source: GREETING (local)')
+    console.log(`  💬 Contenu : "${greeting.slice(0, 100)}..."`)
+    console.log(`  ⏱️  Durée  : ${meta.duration}ms`)
+    console.log('='.repeat(70) + '\n')
+    return { content: greeting, metadata: meta }
   }
 
   // ─── 2. Merci detection ─────────────────────────────────
   if (isThankYou(userMessage)) {
     const thanks = getThankYouResponse(language)
-    console.log(`[Sanovia v7] 💬 Merci détecté — réponse instantanée (${Date.now() - globalStart}ms)`)
-    return thanks
+    const meta = baseMeta({ source: 'thankyou' })
+    console.log('[SANOVIA v8.0] ✅ SUCCÈS — Source: MERCI (local)')
+    console.log(`  💬 Contenu : "${thanks.slice(0, 100)}..."`)
+    console.log(`  ⏱️  Durée  : ${meta.duration}ms`)
+    console.log('='.repeat(70) + '\n')
+    return { content: thanks, metadata: meta }
   }
 
   // ─── 3. Question identité ───────────────────────────────
   if (isIdentityQuestion(userMessage)) {
     const identity = IDENTITY_RESPONSES[language] || IDENTITY_RESPONSES.fr
-    console.log(`[Sanovia v7] 💬 Question identité — réponse instantanée (${Date.now() - globalStart}ms)`)
-    return identity
+    const meta = baseMeta({ source: 'identity' })
+    console.log('[SANOVIA v8.0] ✅ SUCCÈS — Source: IDENTITÉ (local)')
+    console.log(`  💬 Contenu : "${identity.slice(0, 100)}..."`)
+    console.log(`  ⏱️  Durée  : ${meta.duration}ms`)
+    console.log('='.repeat(70) + '\n')
+    return { content: identity, metadata: meta }
   }
 
   const systemPrompt = getSystemPrompt(language, category)
 
-  const orKey = (process.env.OPENROUTER_API_KEY || '').trim()
-  const geminiKey = (process.env.GOOGLE_AI_API_KEY || '').trim()
-  const hasApiKey = (orKey.length >= 10) || (geminiKey.length >= 10)
+  console.log(`[Sanovia v8] langue: ${language}, catégorie: ${category}, OpenRouter: ${orKey ? '✅' : '❌'}, Gemini: ${geminiKey ? '✅' : '❌'}`)
 
-  console.log(`[Sanovia v7] langue: ${language}, catégorie: ${category}, OpenRouter: ${orKey ? '✅' : '❌'}, Gemini: ${geminiKey ? '✅' : '❌'}`)
+  const collectedErrors: string[] = []
 
   // ─── 4. OpenRouter (FOURNISSEUR PRINCIPAL) ──────────────
-  if (orKey.length >= 10) {
+  console.log('[SANOVIA v8.0] 🔄 Tentative OpenRouter (fournisseur principal)...')
+  if (hasOrKey) {
     const orResult = await tryOpenRouter(systemPrompt, userMessage, language, conversationHistory, globalDeadline)
     if (orResult?.content) {
-      console.log(`[Sanovia v7] ✅ Succès via OpenRouter en ${Date.now() - globalStart}ms`)
+      const totalDuration = Date.now() - globalStart
       cache.set(userMessage, language, orResult.content)
-      return orResult.content
+      console.log('[SANOVIA v8.0] ✅ SUCCÈS — Source: OPENROUTER')
+      console.log(`  🤖 Modèle        : ${orResult.model}`)
+      console.log(`  ⏱️  Durée modèle  : ${orResult.duration}ms`)
+      console.log(`  ⏱️  Durée totale : ${totalDuration}ms`)
+      console.log(`  📦 Taille réponse: ${orResult.content.length} caractères`)
+      console.log(`  📄 Contenu (200 premiers chars) :`)
+      console.log(`     "${orResult.content.slice(0, 200)}${orResult.content.length > 200 ? '...' : ''}"`)
+      console.log('='.repeat(70) + '\n')
+      return {
+        content: orResult.content,
+        metadata: baseMeta({
+          source: 'openrouter',
+          provider: 'openrouter',
+          model: orResult.model,
+          duration: totalDuration,
+        })
+      }
     }
-    console.warn(`[Sanovia v7] ⚠️ OpenRouter échoué: ${orResult?.error}`)
+    if (orResult?.error) collectedErrors.push(`OR: ${orResult.error}`)
+    console.warn(`[SANOVIA v8.0] ❌ OpenRouter ÉCHEC — erreur: ${orResult?.error} | modèle: ${orResult?.model}`)
   } else {
-    console.warn('[Sanovia v7] ⚠️ OPENROUTER_API_KEY non configurée')
+    console.warn('[SANOVIA v8.0] ⏭️ OpenRouter SAUTÉ — clé API non configurée')
   }
 
   // ─── 5. Google Gemini (FALLBACK) ────────────────────────
-  if (geminiKey.length >= 10 && Date.now() < globalDeadline) {
+  console.log('[SANOVIA v8.0] 🔄 Tentative Gemini (fallback)...')
+  if (hasGemKey && Date.now() < globalDeadline) {
     const geminiResult = await tryGemini(systemPrompt, userMessage, language, conversationHistory)
     if (geminiResult?.content) {
-      console.log(`[Sanovia v7] ✅ Succès via Gemini en ${Date.now() - globalStart}ms`)
+      const totalDuration = Date.now() - globalStart
       cache.set(userMessage, language, geminiResult.content)
-      return geminiResult.content
+      console.log('[SANOVIA v8.0] ✅ SUCCÈS — Source: GEMINI (fallback)')
+      console.log(`  🔮 Modèle        : ${geminiResult.model}`)
+      console.log(`  ⏱️  Durée modèle  : ${geminiResult.duration}ms`)
+      console.log(`  ⏱️  Durée totale : ${totalDuration}ms`)
+      console.log(`  📦 Taille réponse: ${geminiResult.content.length} caractères`)
+      console.log(`  📄 Contenu (200 premiers chars) :`)
+      console.log(`     "${geminiResult.content.slice(0, 200)}${geminiResult.content.length > 200 ? '...' : ''}"`)
+      console.log('='.repeat(70) + '\n')
+      return {
+        content: geminiResult.content,
+        metadata: baseMeta({
+          source: 'gemini',
+          provider: 'gemini',
+          model: geminiResult.model,
+          duration: totalDuration,
+          errors: collectedErrors,
+        })
+      }
     }
-    console.warn(`[Sanovia v7] ⚠️ Gemini échoué: ${geminiResult?.error}`)
-  } else if (geminiKey.length < 10) {
-    console.warn('[Sanovia v7] ⚠️ GOOGLE_AI_API_KEY non configurée')
+    if (geminiResult?.error) collectedErrors.push(`Gemini: ${geminiResult.error}`)
+    console.warn(`[SANOVIA v8.0] ❌ Gemini ÉCHEC — erreur: ${geminiResult?.error} | modèle: ${geminiResult?.model}`)
+  } else if (!hasGemKey) {
+    console.warn('[SANOVIA v8.0] ⏭️ Gemini SAUTÉ — clé API non configurée')
   }
 
   // ─── 6. Réponses pré-construites (SEULEMENT mots-clés santé reconnus) ───
+  console.log('[SANOVIA v8.0] 🔄 Vérification réponse hors-ligne (mots-clés santé)...')
   const offline = getOfflineResponse(userMessage, language)
   if (offline) {
-    console.log(`[Sanovia v7] 📦 Réponse hors-ligne (mot-clé reconnu) en ${Date.now() - globalStart}ms`)
+    const totalDuration = Date.now() - globalStart
     cache.set(userMessage, language, offline)
-    return offline
+    console.log('[SANOVIA v8.0] ✅ SUCCÈS — Source: HORS-LIGNE (mot-clé reconnu)')
+    console.log(`  📦 Taille réponse: ${offline.length} caractères`)
+    console.log(`  ⏱️  Durée totale : ${totalDuration}ms`)
+    console.log(`  📄 Contenu (200 premiers chars) :`)
+    console.log(`     "${offline.slice(0, 200)}${offline.length > 200 ? '...' : ''}"`)
+    console.log(`  ⚠️  Erreurs précédentes: [${collectedErrors.join(', ')}]`)
+    console.log('='.repeat(70) + '\n')
+    return {
+      content: offline,
+      metadata: baseMeta({
+        source: 'offline',
+        provider: 'offline',
+        model: 'offline',
+        duration: totalDuration,
+        errors: collectedErrors,
+      })
+    }
   }
+  console.log('[SANOVIA v8.0] ❌ Aucun mot-clé santé reconnu pour la réponse hors-ligne')
 
-  // ─── 7. ERREUR — Lancer une exception pour afficher l'erreur réelle ──
-  // L'API route capte cette erreur et renvoie { success: false, error: "..." }
-  // Le store affiche alors l'erreur en clair (toast + message inline rouge)
+  // ─── 7. ERREUR — Lancer une AIError structurée ─────────────
   const elapsed = Date.now() - globalStart
+  console.log('─'.repeat(70))
+  console.log('[SANOVIA v8.0] ❌ ÉCHEC TOTAL — Aucune réponse générée')
+  console.log(`  ⏱️  Durée totale     : ${elapsed}ms`)
+  console.log(`  🔑 OpenRouter clé   : ${hasOrKey ? '✅' : '❌'}`)
+  console.log(`  🔑 Gemini clé       : ${hasGemKey ? '✅' : '❌'}`)
+  console.log(`  📋 Erreurs collectées: [${collectedErrors.join(', ')}]`)
+
   if (!hasApiKey) {
-    console.error(`[Sanovia v7] ❌ AUCUNE CLÉ API configurée après ${elapsed}ms`)
-    throw new Error(
+    console.error(`[SANOVIA v8.0] 💥 ERREUR FATALE — AUCUNE CLÉ API CONFIGURÉE`)
+    console.error('  → Action requise: Configurez OPENROUTER_API_KEY ou GOOGLE_AI_API_KEY sur Vercel')
+    console.error('  → OpenRouter : https://openrouter.ai/keys')
+    console.error('  → Gemini     : https://aistudio.google.com/apikey')
+    console.log('='.repeat(70) + '\n')
+    throw new AIError(
       "Service IA non configuré : aucune clé API (OPENROUTER_API_KEY ou GOOGLE_AI_API_KEY) n'est définie. " +
       "Configurez au moins une clé sur votre plateforme d'hébergement (Vercel). " +
-      "OpenRouter : https://openrouter.ai/keys | Gemini : https://aistudio.google.com/apikey"
+      "OpenRouter : https://openrouter.ai/keys | Gemini : https://aistudio.google.com/apikey",
+      {
+        code: 'NO_API_KEY',
+        provider: 'none',
+        model: 'none',
+        duration: elapsed,
+        openRouterKey: false,
+        geminiKey: false,
+        errors: collectedErrors,
+      }
     )
   }
 
-  console.error(`[Sanovia v7] ❌ Tous les fournisseurs ont échoué après ${elapsed}ms`)
-  throw new Error(
-    "Tous les fournisseurs IA ont échoué. Vérifiez vos clés API et réessayez. Diagnostics : /api/diagnostics"
+  console.error(`[SANOVIA v8.0] 💥 ERREUR — TOUS LES FOURNISSEURS ONT ÉCHOUÉ après ${elapsed}ms`)
+  console.error(`  → Erreurs: [${collectedErrors.join(', ')}]`)
+  console.error('  → Action: Vérifiez vos clés API ou consultez /api/diagnostics')
+  console.log('='.repeat(70) + '\n')
+  throw new AIError(
+    "Tous les fournisseurs IA ont échoué. Vérifiez vos clés API et réessayez. Diagnostics : /api/diagnostics",
+    {
+      code: 'ALL_PROVIDERS_FAILED',
+      provider: collectedErrors.length > 0 ? 'multiple' : 'none',
+      model: 'all',
+      duration: elapsed,
+      openRouterKey: hasOrKey,
+      geminiKey: hasGemKey,
+      errors: collectedErrors,
+    }
   )
 }
 
@@ -751,7 +954,7 @@ export async function chatWithAI(
 export async function diagnoseAPI(): Promise<Record<string, unknown>> {
   const diagnostics: Record<string, unknown> = {
     timestamp: new Date().toISOString(),
-    version: '7.0',
+    version: '8.0',
     architecture: 'OpenRouter (principal) → Gemini (fallback) → Hors-ligne',
     providers: {}
   }

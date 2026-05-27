@@ -23,6 +23,17 @@ interface Message {
   content: string
   language: string
   createdAt: string
+  serverMeta?: {
+    source: string
+    provider: string
+    model: string
+    duration: number
+    cached: boolean
+    openRouterKey: boolean
+    geminiKey: boolean
+    errors: string[]
+    timestamp: string
+  } | null
 }
 
 interface Conversation {
@@ -381,7 +392,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
           role: 'assistant',
           content: assistantMessage.content,
           language: assistantMessage.language,
-          createdAt: assistantMessage.createdAt
+          createdAt: assistantMessage.createdAt,
+          serverMeta: data.data.serverMeta || null
         }
         set({
           currentConversation: {
@@ -406,7 +418,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
 
       // API returned an error
-      const errorMsg = data.error || "Erreur lors de l'envoi du message."
+      const errorDetails = data.details
+      const errorMsg = errorDetails
+        ? `[${errorDetails.code}] ${data.error}\n\nFournisseur: ${errorDetails.provider}\nModèle: ${errorDetails.model}\nDurée: ${errorDetails.duration}ms\nClés API — OpenRouter: ${errorDetails.openRouterKey ? '✅' : '❌'} | Gemini: ${errorDetails.geminiKey ? '✅' : '❌'}\nErreurs: ${(errorDetails.errors || []).join(', ') || 'aucune'}`
+        : data.error || "Erreur lors de l'envoi du message."
 
       // Rollback: remove optimistic user message
       const conv = get().currentConversation
