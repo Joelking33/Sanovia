@@ -596,7 +596,7 @@ async function tryGemini(
 // 9. FOURNISSEUR HORS-LIGNE — Réponses pré-construites
 // ═══════════════════════════════════════════════════════════════
 
-function getOfflineResponse(userMessage: string, language: string): string {
+function getOfflineResponse(userMessage: string, language: string): string | null {
   const msg = userMessage.toLowerCase().trim()
 
   const responses: Record<string, Record<string, string>> = {
@@ -610,19 +610,15 @@ function getOfflineResponse(userMessage: string, language: string): string {
       sante_mentale: `🩺 **Santé Mentale**\n\nLa santé mentale est aussi importante que la santé physique. N'hésitez pas à en parler.\n\n**Signes à surveiller :** Tristesse persistante, perte d'intérêt, troubles du sommeil, anxiété, isolement.\n\n**Conseils :**\n- Parlez à vos proches\n- Faites de l'activité physique\n- Maintenez une routine de sommeil\n- Essayez la méditation\n- Limitez l'alcool\n\n**Où trouver de l'aide :** CHU Cocody/Yopougon (service de psychiatrie), associations d'aide.\n\nVous n'êtes pas seul(e). 💚`,
       nutrition: `🩺 **Nutrition**\n\nUne bonne nutrition est la base d'une bonne santé.\n\n**Principes :**\n- 5 portions de fruits et légumes par jour\n- Céréales complètes (riz, mil, maïs)\n- Protéines (poisson, viande, œufs, légumineuses)\n- Limiter les graisses et sucres\n\n**Aliments locaux recommandés :** Igname, patate douce, manioc, banane plantain, poisson, riz, mil, attiéké.\n\nBuvez au moins 1,5L d'eau par jour. 💚`,
       urgence: `🚨 **URGENCE MÉDICALE**\n\nAppelez immédiatement :\n- **SAMU : 185**\n- **Pompiers : 180**\n- **Police : 170**\n\n**Signes d'urgence :**\n- Douleur thoracique\n- Difficultés respiratoires\n- Saignements abondants\n- Perte de conscience\n- Convulsions\n\n**En attendant les secours :**\n- Restez calme\n- Ne déplacez pas la victime\n- Maintenez-la au chaud\n- Surveillez sa respiration`,
-      default: "Je suis Sanovia 🩺, votre assistant santé ! Posez-moi n'importe quelle question sur la santé et je ferai mon possible pour vous aider.\n\nPar exemple :\n- \"Qu'est-ce que le paludisme ?\"\n- \"Comment prévenir le choléra ?\"\n- \"Que manger pendant la grossesse ?\"\n- \"Comment gérer le stress ?\"\n\n⚠️ Pour toute urgence médicale, appelez le **SAMU 185** ou les **Pompiers 180**.",
     },
     ba: {
       paludisme: `🩺 **Paluditre (Malaria)**\n\nPaluditre ye sran banna ye mɔgɔw fɛ.\n\nSran banna : awo la, tɔɔ kɛnɛnɛ.\n\nA bɛ kɛ n'ɛ : klɔsɛn, jɛ a ɛnɛ.\n\n⚠️ SAMU 185, Pompiers 180.`,
-      default: "Luɛ Sanoovia 🩺 ! I ka sran man fɔn, a bɛ ka dɛmɛ !\n\n⚠️ SAMU 185, Pompiers 180.",
     },
     dy: {
       paludisme: `🩺 **Paludisme**\n\nPaludisme ye banjɛ banna ye.\n\nBanjɛ kɛnɛnɛw : awo la, tɔɔ kɛnɛnɛ.\n\nA bɛ kɛ n'ɛ : klɔsɛn, jɛ i ɛnɛ.\n\n⚠️ SAMU 185, Pompiers 180.`,
-      default: "I tɔɔrɔ Sanoovia ye 🩺 ! I ka banjɛ fɔn, a bɛ ka dɛmɛ !\n\n⚠️ SAMU 185, Pompiers 180.",
     },
     bq: {
       paludisme: `🩺 **Paludisme**\n\nPaludisme yɛ sran banna ye.\n\nSran banna kɛnɛnɛw : awo la, tɔɔ kɛnɛnɛ.\n\nA bɛ kɛ n'ɛ : klɔsɛn, jɛ a ɛnɛ.\n\n⚠️ SAMU 185, Pompiers 180.`,
-      default: "Sanoovia yɛ 🩺 ! I ka sran fɔn, a bɛ ka wle !\n\n⚠️ SAMU 185, Pompiers 180.",
     }
   }
 
@@ -645,7 +641,8 @@ function getOfflineResponse(userMessage: string, language: string): string {
       if (response) return response
     }
   }
-  return langResponses.default || responses.fr.default
+  // AUCUNE réponse par défaut — retourne null pour afficher l'erreur réelle
+  return null
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -690,6 +687,7 @@ export async function chatWithAI(
 
   const orKey = (process.env.OPENROUTER_API_KEY || '').trim()
   const geminiKey = (process.env.GOOGLE_AI_API_KEY || '').trim()
+  const hasApiKey = (orKey.length >= 10) || (geminiKey.length >= 10)
 
   console.log(`[Sanovia v7] langue: ${language}, catégorie: ${category}, OpenRouter: ${orKey ? '✅' : '❌'}, Gemini: ${geminiKey ? '✅' : '❌'}`)
 
@@ -703,7 +701,7 @@ export async function chatWithAI(
     }
     console.warn(`[Sanovia v7] ⚠️ OpenRouter échoué: ${orResult?.error}`)
   } else {
-    console.log('[Sanovia v7] ⏭️ OpenRouter non configuré (pas de clé API)')
+    console.warn('[Sanovia v7] ⚠️ OPENROUTER_API_KEY non configurée')
   }
 
   // ─── 5. Google Gemini (FALLBACK) ────────────────────────
@@ -716,21 +714,34 @@ export async function chatWithAI(
     }
     console.warn(`[Sanovia v7] ⚠️ Gemini échoué: ${geminiResult?.error}`)
   } else if (geminiKey.length < 10) {
-    console.log('[Sanovia v7] ⏭️ Gemini non configuré (pas de clé API)')
+    console.warn('[Sanovia v7] ⚠️ GOOGLE_AI_API_KEY non configurée')
   }
 
-  // ─── 6. Réponses pré-construites (dernier recours) ───────
-  console.log('[Sanovia v7] 📦 Fallback hors-ligne...')
+  // ─── 6. Réponses pré-construites (SEULEMENT mots-clés santé reconnus) ───
   const offline = getOfflineResponse(userMessage, language)
   if (offline) {
-    console.log(`[Sanovia v7] ✅ Réponse hors-ligne en ${Date.now() - globalStart}ms`)
+    console.log(`[Sanovia v7] 📦 Réponse hors-ligne (mot-clé reconnu) en ${Date.now() - globalStart}ms`)
     cache.set(userMessage, language, offline)
     return offline
   }
 
-  // ─── 7. Erreur ultime ────────────────────────────────────
-  console.error(`[Sanovia v7] ❌ Aucune réponse disponible après ${Date.now() - globalStart}ms`)
-  return getErrorMessage(language, 'allFailed')
+  // ─── 7. ERREUR — Lancer une exception pour afficher l'erreur réelle ──
+  // L'API route capte cette erreur et renvoie { success: false, error: "..." }
+  // Le store affiche alors l'erreur en clair (toast + message inline rouge)
+  const elapsed = Date.now() - globalStart
+  if (!hasApiKey) {
+    console.error(`[Sanovia v7] ❌ AUCUNE CLÉ API configurée après ${elapsed}ms`)
+    throw new Error(
+      "Service IA non configuré : aucune clé API (OPENROUTER_API_KEY ou GOOGLE_AI_API_KEY) n'est définie. " +
+      "Configurez au moins une clé sur votre plateforme d'hébergement (Vercel). " +
+      "OpenRouter : https://openrouter.ai/keys | Gemini : https://aistudio.google.com/apikey"
+    )
+  }
+
+  console.error(`[Sanovia v7] ❌ Tous les fournisseurs ont échoué après ${elapsed}ms`)
+  throw new Error(
+    "Tous les fournisseurs IA ont échoué. Vérifiez vos clés API et réessayez. Diagnostics : /api/diagnostics"
+  )
 }
 
 // ═══════════════════════════════════════════════════════════════
