@@ -15,8 +15,8 @@ export async function GET(request: NextRequest) {
     const result = await diagnoseAPI()
 
     return Response.json({
-      app: 'Sanovia v4.0',
-      architecture: 'Multi-fournisseur (Gemini + OpenRouter + Offline)',
+      app: 'Sanovia v7.0',
+      architecture: 'OpenRouter (principal) → Gemini (fallback) → Hors-ligne',
       timestamp: new Date().toISOString(),
       ...result
     }, { status: 200 })
@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
   } catch (err: any) {
     console.error('[Diagnostics Error]', err)
     return Response.json({
-      app: 'Sanovia v4.0',
+      app: 'Sanovia v7.0',
       status: 'error',
       error: err?.message || 'Erreur lors du diagnostic',
       timestamp: new Date().toISOString()
