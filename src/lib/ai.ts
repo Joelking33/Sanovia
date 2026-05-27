@@ -64,6 +64,8 @@ interface ProviderResult {
   provider: string
   model: string
   duration: number
+  rawError?: string   // Erreur brute du fournisseur (détails HTTP)
+  modelErrors?: string[]  // Erreurs détaillées par modèle (pour le fallback)
 }
 
 export interface AIMetadata {
@@ -476,10 +478,20 @@ async function callORModel(apiKey: string, model: string, messages: Array<{ role
       clearTimeout(timeoutId)
       if (!response.ok) {
         const status = response.status
-        if (status === 401 || status === 403) return { content: null, error: 'OR_KEY_INVALID', provider: 'openrouter', model, duration: Date.now() - startTime }
-        if (isRetryableError(status) && attempt < MAX_RETRIES) { await sleep(RETRY_BASE_DELAY * Math.pow(2, attempt - 1)); continue }
+        // Capturer le détail de l'erreur OpenRouter
+        let rawError = ''
+        try {
+          const errBody = await response.json()
+          rawError = errBody.error?.message || errBody.error?.code || errBody.message || JSON.stringify(errBody).slice(0, 300)
+        } catch { rawError = `HTTP ${status} — aucune réponse JSON` }
+        if (status === 401 || status === 403) {
+          const detail = rawError ? ` — ${rawError}` : ''
+          recordFail(model)
+          return { content: null, error: `OR_KEY_INVALID`, rawError: `HTTP ${status}${detail}`, provider: 'openrouter', model, duration: Date.now() - startTime }
+        }
+        if (isRetryableError(status) && attempt < MAX_RETRIES) { console.warn(`[OpenRouter] ${model}: HTTP ${status} — retry ${attempt}/${MAX_RETRIES} — ${rawError}`); await sleep(RETRY_BASE_DELAY * Math.pow(2, attempt - 1)); continue }
         recordFail(model)
-        return { content: null, error: `OR_HTTP_${status}`, provider: 'openrouter', model, duration: Date.now() - startTime }
+        return { content: null, error: `OR_HTTP_${status}`, rawError: `HTTP ${status} — ${rawError}`, provider: 'openrouter', model, duration: Date.now() - startTime }
       }
       const data = await response.json()
       const content = data.choices?.[0]?.message?.content
@@ -497,13 +509,14 @@ async function callORModel(apiKey: string, model: string, messages: Array<{ role
       return { content: null, error: 'OR_VIDE', provider: 'openrouter', model, duration: Date.now() - startTime }
     } catch (err: any) {
       clearTimeout(timeoutId)
-      if (attempt < MAX_RETRIES) { await sleep(RETRY_BASE_DELAY * attempt); continue }
+      const errMsg = err?.name === 'AbortError' ? 'Timeout (25s dépassé)' : (err?.message || 'OR_NETWORK')
+      if (attempt < MAX_RETRIES) { console.warn(`[OpenRouter] ${model}: ${errMsg} — retry ${attempt}/${MAX_RETRIES}`); await sleep(RETRY_BASE_DELAY * attempt); continue }
       recordFail(model)
-      return { content: null, error: err?.message || 'OR_NETWORK', provider: 'openrouter', model, duration: Date.now() - startTime }
+      return { content: null, error: errMsg, rawError: errMsg, provider: 'openrouter', model, duration: Date.now() - startTime }
     }
   }
   recordFail(model)
-  return { content: null, error: 'OR_MAX_RETRIES', provider: 'openrouter', model, duration: Date.now() - startTime }
+  return { content: null, error: 'OR_MAX_RETRIES', rawError: '3 tentatives échouées', provider: 'openrouter', model, duration: Date.now() - startTime }
 }
 
 async function tryOpenRouter(
@@ -529,18 +542,29 @@ async function tryOpenRouter(
 
   console.log(`[OpenRouter] 🚀 Fournisseur PRINCIPAL — ${availableModels.length} modèle(s)`)
 
+  // Collecter les erreurs par modèle pour le diagnostic
+  const allModelErrors: string[] = []
+
   for (let i = 0; i < availableModels.length; i += PARALLEL_BATCH_SIZE) {
     if (Date.now() >= deadline) break
     const batch = availableModels.slice(i, i + PARALLEL_BATCH_SIZE)
+    console.log(`[OpenRouter] 🔄 Batch ${Math.floor(i / PARALLEL_BATCH_SIZE) + 1} — modèles: ${batch.join(', ')}`)
     const results = await Promise.all(batch.map(model => callORModel(apiKey, model, messages)))
     for (const r of results) {
       if (r.content) return r
-      if (r.error === 'OR_KEY_INVALID') return { content: null, error: 'OR_KEY_INVALID', provider: 'openrouter', model: 'all', duration: 0 }
+      // Collecter l'erreur détaillée par modèle
+      const errDetail = r.rawError ? `${r.error} (${r.rawError})` : r.error
+      allModelErrors.push(`${r.model}: ${errDetail}`)
+      if (r.error === 'OR_KEY_INVALID') {
+        console.error(`[OpenRouter] ❌ CLÉ INVALIDE détectée — ${r.rawError}`)
+        return { content: null, error: 'OR_KEY_INVALID', rawError: r.rawError, provider: 'openrouter', model: 'all', duration: 0, modelErrors: allModelErrors }
+      }
     }
   }
 
-  console.warn('[OpenRouter] ❌ Tous les modèles ont échoué, passage au fallback Gemini')
-  return { content: null, error: 'OR_ALL_FAILED', provider: 'openrouter', model: 'all', duration: 0 }
+  console.warn(`[OpenRouter] ❌ Tous les ${availableModels.length} modèles ont échoué:`)
+  allModelErrors.forEach(e => console.warn(`  → ${e}`))
+  return { content: null, error: 'OR_ALL_FAILED', provider: 'openrouter', model: 'all', duration: 0, modelErrors: allModelErrors }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -599,13 +623,20 @@ async function callGemini(
 
       if (!response.ok) {
         const status = response.status
+        // Capturer le détail de l'erreur Gemini
+        let rawError = ''
+        try {
+          const errBody = await response.json()
+          rawError = errBody.error?.message || errBody.message || JSON.stringify(errBody).slice(0, 300)
+        } catch { rawError = `HTTP ${status} — aucune réponse JSON` }
         if ((status === 400 || status === 403) && attempt === 1) {
-          return { content: null, error: `GEMINI_FATAL_${status}`, provider: 'gemini', model, duration: Date.now() - startTime }
+          return { content: null, error: `GEMINI_FATAL_${status}`, rawError: `HTTP ${status} — ${rawError}`, provider: 'gemini', model, duration: Date.now() - startTime }
         }
         if (isRetryableError(status) || status === 429) {
+          console.warn(`[Gemini] ${model}: HTTP ${status} — ${rawError} — retry ${attempt}/${MAX_RETRIES}`)
           if (attempt < MAX_RETRIES) { await sleep(RETRY_BASE_DELAY * Math.pow(2, attempt - 1)); continue }
         }
-        return { content: null, error: `GEMINI_HTTP_${status}`, provider: 'gemini', model, duration: Date.now() - startTime }
+        return { content: null, error: `GEMINI_HTTP_${status}`, rawError: `HTTP ${status} — ${rawError}`, provider: 'gemini', model, duration: Date.now() - startTime }
       }
 
       const data = await response.json()
@@ -630,15 +661,14 @@ async function callGemini(
 
     } catch (err: any) {
       clearTimeout(timeoutId)
-      if (err?.name === 'AbortError') {
-        if (attempt < MAX_RETRIES) { await sleep(RETRY_BASE_DELAY * attempt); continue }
-      }
+      const errMsg = err?.name === 'AbortError' ? 'Timeout (25s dépassé)' : (err?.message || 'GEMINI_NETWORK')
+      if (err?.name === 'AbortError' && attempt < MAX_RETRIES) { await sleep(RETRY_BASE_DELAY * attempt); continue }
       if (attempt < MAX_RETRIES) { await sleep(RETRY_BASE_DELAY * attempt); continue }
-      return { content: null, error: err?.message || 'GEMINI_NETWORK', provider: 'gemini', model, duration: Date.now() - startTime }
+      return { content: null, error: errMsg, rawError: errMsg, provider: 'gemini', model, duration: Date.now() - startTime }
     }
   }
 
-  return { content: null, error: 'GEMINI_MAX_RETRIES', provider: 'gemini', model, duration: Date.now() - startTime }
+  return { content: null, error: 'GEMINI_MAX_RETRIES', rawError: '3 tentatives échouées', provider: 'gemini', model, duration: Date.now() - startTime }
 }
 
 async function tryGemini(
@@ -652,11 +682,19 @@ async function tryGemini(
 
   console.log(`[Gemini] 🚀 FALLBACK — ${GEMINI_MODELS.length} modèle(s)`)
   const results = await Promise.all(GEMINI_MODELS.map(model => callGemini(apiKey, model, systemPrompt, userMessage, history)))
-  for (const result of results) { if (result.content) return result }
+
+  // Collecter les erreurs détaillées par modèle
+  const allModelErrors: string[] = []
+  for (const result of results) {
+    if (result.content) return result
+    const errDetail = result.rawError ? `${result.error} (${result.rawError})` : result.error
+    allModelErrors.push(`${result.model}: ${errDetail}`)
+  }
 
   const hasFatal = results.some(r => r.error?.startsWith('GEMINI_FATAL'))
-  console.warn(`[Gemini] ❌ Échoué (${hasFatal ? 'ERREUR FATALE' : 'timeout/serveur'})`)
-  return { content: null, error: 'GEMINI_ALL_FAILED', provider: 'gemini', model: 'all', duration: 0 }
+  console.warn(`[Gemini] ❌ Échoué (${hasFatal ? 'ERREUR FATALE' : 'timeout/serveur'}):`)
+  allModelErrors.forEach(e => console.warn(`  → ${e}`))
+  return { content: null, error: 'GEMINI_ALL_FAILED', provider: 'gemini', model: 'all', duration: 0, modelErrors: allModelErrors }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -834,8 +872,15 @@ export async function chatWithAI(
         })
       }
     }
-    if (orResult?.error) collectedErrors.push(`OR: ${orResult.error}`)
-    console.warn(`[SANOVIA v8.0] ❌ OpenRouter ÉCHEC — erreur: ${orResult?.error} | modèle: ${orResult?.model}`)
+    if (orResult?.error) {
+      // Propager les erreurs détaillées par modèle si disponibles
+      if (orResult.modelErrors && orResult.modelErrors.length > 0) {
+        collectedErrors.push(...orResult.modelErrors.map(e => `OR: ${e}`))
+      } else {
+        collectedErrors.push(`OR: ${orResult.error}${orResult.rawError ? ' (' + orResult.rawError + ')' : ''}`)
+      }
+    }
+    console.warn(`[SANOVIA v8.0] ❌ OpenRouter ÉCHEC — erreur: ${orResult?.error} | modèle: ${orResult?.model} | détails: ${orResult?.rawError || 'n/a'}`)
   } else {
     console.warn('[SANOVIA v8.0] ⏭️ OpenRouter SAUTÉ — clé API non configurée')
   }
@@ -866,8 +911,15 @@ export async function chatWithAI(
         })
       }
     }
-    if (geminiResult?.error) collectedErrors.push(`Gemini: ${geminiResult.error}`)
-    console.warn(`[SANOVIA v8.0] ❌ Gemini ÉCHEC — erreur: ${geminiResult?.error} | modèle: ${geminiResult?.model}`)
+    if (geminiResult?.error) {
+      // Propager les erreurs détaillées par modèle si disponibles
+      if (geminiResult.modelErrors && geminiResult.modelErrors.length > 0) {
+        collectedErrors.push(...geminiResult.modelErrors.map(e => `Gemini: ${e}`))
+      } else {
+        collectedErrors.push(`Gemini: ${geminiResult.error}${geminiResult.rawError ? ' (' + geminiResult.rawError + ')' : ''}`)
+      }
+    }
+    console.warn(`[SANOVIA v8.0] ❌ Gemini ÉCHEC — erreur: ${geminiResult?.error} | modèle: ${geminiResult?.model} | détails: ${geminiResult?.rawError || 'n/a'}`)
   } else if (!hasGemKey) {
     console.warn('[SANOVIA v8.0] ⏭️ Gemini SAUTÉ — clé API non configurée')
   }
@@ -954,7 +1006,7 @@ export async function chatWithAI(
 export async function diagnoseAPI(): Promise<Record<string, unknown>> {
   const diagnostics: Record<string, unknown> = {
     timestamp: new Date().toISOString(),
-    version: '8.0',
+    version: '8.1',
     architecture: 'OpenRouter (principal) → Gemini (fallback) → Hors-ligne',
     providers: {}
   }
@@ -965,7 +1017,7 @@ export async function diagnoseAPI(): Promise<Record<string, unknown>> {
     try {
       const start = Date.now()
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 10_000)
+      const timeoutId = setTimeout(() => controller.abort(), 15_000)
       const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -988,10 +1040,13 @@ export async function diagnoseAPI(): Promise<Record<string, unknown>> {
         httpStatus: res.status,
         responseTime: `${Date.now() - start}ms`,
         content: data.choices?.[0]?.message?.content?.slice(0, 100) || null,
-        error: data.error?.message || null
+        error: data.error?.message || null,
+        errorCode: data.error?.code || null,
+        // Brut: toute la réponse pour diagnostic
+        rawResponse: JSON.stringify(data).slice(0, 500)
       }
     } catch (err: any) {
-      diagnostics.providers.openrouter = { status: 'error', error: err?.message }
+      diagnostics.providers.openrouter = { status: 'error', error: err?.message, errorType: err?.name }
     }
   } else {
     diagnostics.providers.openrouter = { status: 'not_configured', message: 'OPENROUTER_API_KEY non définie' }
@@ -1003,7 +1058,7 @@ export async function diagnoseAPI(): Promise<Record<string, unknown>> {
     try {
       const start = Date.now()
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 10_000)
+      const timeoutId = setTimeout(() => controller.abort(), 15_000)
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${gemKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1020,10 +1075,12 @@ export async function diagnoseAPI(): Promise<Record<string, unknown>> {
         httpStatus: res.status,
         responseTime: `${Date.now() - start}ms`,
         content: data.candidates?.[0]?.content?.parts?.[0]?.text?.slice(0, 100) || null,
-        error: data.error?.message || null
+        error: data.error?.message || null,
+        // Brut: toute la réponse pour diagnostic
+        rawResponse: JSON.stringify(data).slice(0, 500)
       }
     } catch (err: any) {
-      diagnostics.providers.gemini = { status: 'error', error: err?.message }
+      diagnostics.providers.gemini = { status: 'error', error: err?.message, errorType: err?.name }
     }
   } else {
     diagnostics.providers.gemini = { status: 'not_configured', message: 'GOOGLE_AI_API_KEY non définie' }

@@ -419,9 +419,36 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       // API returned an error
       const errorDetails = data.details
-      const errorMsg = errorDetails
-        ? `[${errorDetails.code}] ${data.error}\n\nFournisseur: ${errorDetails.provider}\nModèle: ${errorDetails.model}\nDurée: ${errorDetails.duration}ms\nClés API — OpenRouter: ${errorDetails.openRouterKey ? '✅' : '❌'} | Gemini: ${errorDetails.geminiKey ? '✅' : '❌'}\nErreurs: ${(errorDetails.errors || []).join(', ') || 'aucune'}`
-        : data.error || "Erreur lors de l'envoi du message."
+      let errorMsg: string
+      if (errorDetails) {
+        const errors = errorDetails.errors || []
+        // Formatter les erreurs détaillées de façon lisible
+        let errorBlock = ''
+        if (errors.length > 0) {
+          // Afficher max 6 erreurs détaillées + résumé
+          const shown = errors.slice(0, 6)
+          const remaining = errors.length - shown.length
+          errorBlock = shown.map((e: string) => `  • ${e}`).join('\n')
+          if (remaining > 0) errorBlock += `\n  ... et ${remaining} autre(s) erreur(s)`
+        } else {
+          errorBlock = '  • aucune erreur détaillée disponible'
+        }
+
+        // Détecter si c'est un problème de clé API
+        const isKeyIssue = errors.some((e: string) =>
+          e.includes('KEY_INVALID') || e.includes('401') || e.includes('403') || e.includes('INVALID')
+        )
+        const keyHint = isKeyIssue
+          ? '\n\n⚠️ ACTION: Vérifiez que vos clés API sont valides et non expirées.\n  → OpenRouter: https://openrouter.ai/keys\n  → Gemini: https://aistudio.google.com/apikey'
+          : ''
+
+        errorMsg = `[${errorDetails.code}] ${data.error}\n\n` +
+          `Fournisseur: ${errorDetails.provider} | Modèle: ${errorDetails.model} | Durée: ${errorDetails.duration}ms\n` +
+          `Clés API — OpenRouter: ${errorDetails.openRouterKey ? '✅' : '❌'} | Gemini: ${errorDetails.geminiKey ? '✅' : '❌'}\n\n` +
+          `Détails des erreurs:\n${errorBlock}${keyHint}`
+      } else {
+        errorMsg = data.error || "Erreur lors de l'envoi du message."
+      }
 
       // Rollback: remove optimistic user message
       const conv = get().currentConversation
