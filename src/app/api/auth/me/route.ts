@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
-import { authenticate, success, unauthorized, notFound } from '@/lib/middleware'
+import { authenticate, success, unauthorized, notFound, toISO } from '@/lib/middleware'
 
 /**
  * GET /api/auth/me
@@ -40,7 +40,18 @@ export async function GET(request: NextRequest) {
     }
 
     return success({
-      ...user,
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      avatarUrl: user.avatarUrl,
+      phone: user.phone,
+      language: user.language,
+      authProvider: user.authProvider,
+      role: user.role,
+      isActive: user.isActive,
+      lastLoginAt: user.lastLoginAt ? toISO(user.lastLoginAt) : null,
+      createdAt: toISO(user.createdAt),
+      updatedAt: toISO(user.updatedAt),
       conversationCount: user._count.conversations
     })
 

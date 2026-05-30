@@ -15,39 +15,122 @@ export function isValidCategory(category: string): boolean {
 }
 
 // ============================================================
-// SÉRIALISATION JSON SÉCURISÉE
-// Prévient l'erreur "toISOString is not a function"
-// lors de la sérialisation des objets Date de Prisma
+// CONVERSION DATE → STRING ISO (BULLETPROOF)
+// ============================================================
+// Ce helper DOIT être utilisé pour TOUTE valeur Date venant de Prisma
+// avant toute sérialisation JSON. Il empêche l'erreur
+// "(intermediate value).toISOString is not a function" qui se
+// produit quand JSON.stringify tente d'appeler toJSON()/toISOString()
+// sur des objets Date non-standards (certains drivers Neon/pgBouncer).
+// ============================================================
+
+export function toISO(val: unknown): string {
+  // Cas 1 : vrai objet Date JavaScript
+  if (val instanceof Date) {
+    try {
+      return val.toISOString()
+    } catch {
+      // Fallback si toISOString est cassé
+      return new Date(val.getTime()).toISOString()
+    }
+  }
+  // Cas 2 : déjà une string ISO
+  if (typeof val === 'string' && val.length > 0) {
+    return val
+  }
+  // Cas 3 : objet date-like (non-standard, ex: Prisma proxy)
+  if (val !== null && typeof val === 'object') {
+    try {
+      // Essayer getTime() (existe sur les vrais Dates et certains proxies)
+      if (typeof (val as any).getTime === 'function') {
+        const ts = (val as any).getTime()
+        if (typeof ts === 'number' && isFinite(ts)) {
+          return new Date(ts).toISOString()
+        }
+      }
+      // Essayer toISOString() directement
+      if (typeof (val as any).toISOString === 'function') {
+        return (val as any).toISOString()
+      }
+    } catch {
+      // Ignorer les erreurs, on passera au fallback
+    }
+  }
+  // Cas 4 : number (timestamp)
+  if (typeof val === 'number' && isFinite(val)) {
+    return new Date(val).toISOString()
+  }
+  // Fallback ultime
+  return new Date().toISOString()
+}
+
+// ============================================================
+// SÉRIALISATION JSON SÉCURISÉE (BULLETPROOF)
+// ============================================================
+// Pré-traite TOUTE la structure de données pour convertir
+// les Date/objets date-like en strings ISO AVANT JSON.stringify.
+// Cela empêche toute erreur de sérialisation côté server.
 // ============================================================
 
 /**
- * Replacer JSON qui convertit les objets Date en chaînes ISO.
- * Les objets Date Prisma sont passés par référence et peuvent
- * poser problème avec JSON.stringify() dans certains runtimes.
+ * Convertit récursivement toutes les valeurs Date/date-like en strings ISO.
+ * Pré-traitement appliqué AVANT JSON.stringify pour éviter toute erreur
+ * de sérialisation avec les objets Date non-standards.
  */
-const dateReplacer = (_key: string, value: unknown): unknown => {
-  if (value instanceof Date) {
+function preprocessDates(data: unknown, depth = 0): unknown {
+  if (depth > 20) return data // Limiter la profondeur pour éviter stack overflow
+
+  if (data instanceof Date) {
+    return toISO(data)
+  }
+
+  if (data === null || data === undefined) {
+    return data
+  }
+
+  if (typeof data === 'string' || typeof data === 'number' || typeof data === 'boolean') {
+    return data
+  }
+
+  // Object date-like non-standard (ex: proxy Prisma)
+  if (typeof data === 'object' && data !== null && 'getTime' in data) {
     try {
-      return value.toISOString()
+      if (typeof (data as any).getTime === 'function') {
+        return toISO(data)
+      }
     } catch {
-      return new Date().toISOString()
+      // Pas un date-like utilisable
     }
   }
-  return value
+
+  if (Array.isArray(data)) {
+    return data.map(item => preprocessDates(item, depth + 1))
+  }
+
+  if (typeof data === 'object') {
+    const result: Record<string, unknown> = {}
+    for (const key of Object.keys(data)) {
+      result[key] = preprocessDates((data as Record<string, unknown>)[key], depth + 1)
+    }
+    return result
+  }
+
+  return data
 }
 
 export function safeJsonStringify(data: unknown): string {
   try {
-    return JSON.stringify(data, dateReplacer)
+    // Pré-traiter les dates AVANT la sérialisation
+    const preprocessed = preprocessDates(data)
+    return JSON.stringify(preprocessed)
   } catch (err) {
     console.error('[safeJsonStringify] Erreur de sérialisation:', err)
-    // Fallback : convertir les dates manuellement
-    return JSON.stringify(data, (_key, value) => {
-      if (value && typeof value === 'object' && 'toISOString' in value) {
-        try { return (value as Date).toISOString() } catch { return String(value) }
-      }
-      return value
-    })
+    // Fallback ultime : convertir en string manuellement
+    try {
+      return JSON.stringify(String(data))
+    } catch {
+      return '{}'
+    }
   }
 }
 

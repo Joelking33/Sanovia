@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server'
 import { OAuth2Client } from 'google-auth-library'
 import { db } from '@/lib/db'
 import { generateToken } from '@/lib/auth'
-import { badRequest, success, error } from '@/lib/middleware'
+import { badRequest, success, error, toISO } from '@/lib/middleware'
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || ''
 
@@ -104,7 +104,7 @@ export async function POST(request: NextRequest) {
         avatarUrl: user.avatarUrl,
         language: user.language,
         role: user.role,
-        lastLoginAt: user.lastLoginAt
+        lastLoginAt: user.lastLoginAt ? toISO(user.lastLoginAt) : null
       },
       token
     })

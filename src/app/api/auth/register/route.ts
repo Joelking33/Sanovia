@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { hashPassword, validatePassword, isValidEmail, generateToken } from '@/lib/auth'
-import { badRequest, created, error } from '@/lib/middleware'
+import { badRequest, created, error, toISO } from '@/lib/middleware'
 
 /**
  * POST /api/auth/register
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
         name: user.name,
         language: user.language,
         role: user.role,
-        createdAt: user.createdAt
+        createdAt: toISO(user.createdAt)
       },
       token
     })

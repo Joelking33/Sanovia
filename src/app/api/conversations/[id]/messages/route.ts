@@ -1,17 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { authenticate, success, created, badRequest, notFound, forbidden, error, safeJsonStringify } from '@/lib/middleware'
+import { authenticate, success, created, badRequest, notFound, forbidden, error, safeJsonStringify, toISO } from '@/lib/middleware'
 import { chatWithAI, AIError } from '@/lib/ai'
-
-// ═══════════════════════════════════════════════════════════
-// Utilitaire : conversion sécurisée Date → string ISO
-// Prévient l'erreur "toISOString is not a function"
-// ═══════════════════════════════════════════════════════════
-function toISO(val: unknown): string {
-  if (val instanceof Date) return val.toISOString()
-  if (typeof val === 'string' && val.length > 0) return val
-  return new Date().toISOString()
-}
 
 /**
  * GET /api/conversations/[id]/messages
@@ -42,7 +32,17 @@ export async function GET(
       take: limit
     })
 
-    return success({ messages, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } })
+    // Convertir les Date Prisma en strings ISO avant sérialisation
+    const serializedMessages = messages.map(msg => ({
+      id: msg.id,
+      conversationId: msg.conversationId,
+      role: msg.role,
+      content: msg.content,
+      language: msg.language,
+      createdAt: toISO(msg.createdAt)
+    }))
+
+    return success({ messages: serializedMessages, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } })
   } catch (err: any) {
     console.error('[Messages GET Error]', err)
     return error('Erreur lors de la récupération des messages.')
@@ -100,7 +100,7 @@ export async function POST(
         language: conversation.language
       }
     })
-    console.log(`[Route] Message utilisateur sauvegardé: id=${userMessage.id}, createdAt type=${typeof userMessage.createdAt}, isDate=${userMessage.createdAt instanceof Date}`)
+    console.log(`[Route] Message utilisateur sauvegardé: id=${userMessage.id}`)
 
     // Générer la réponse IA
     const aiResponse = await chatWithAI(
@@ -114,7 +114,7 @@ export async function POST(
     )
 
     const meta = aiResponse.metadata
-    console.log(`[Route] ✅ SUCCÈS — source: ${meta.source}, modèle: ${meta.model}, durée: ${meta.duration}ms`)
+    console.log(`[Route] SUCCES — source: ${meta.source}, modele: ${meta.model}, duree: ${meta.duration}ms`)
 
     // Sauvegarder la réponse IA
     const assistantMessage = await db.message.create({
@@ -125,15 +125,13 @@ export async function POST(
         language: conversation.language
       }
     })
-    console.log(`[Route] Message assistant sauvegardé: id=${assistantMessage.id}, createdAt type=${typeof assistantMessage.createdAt}, isDate=${assistantMessage.createdAt instanceof Date}`)
+    console.log(`[Route] Message assistant sauvegarde: id=${assistantMessage.id}`)
 
     // Mettre à jour le titre si premier message
     if (conversation.messages.length === 0) {
       const title = content.trim().substring(0, 60) + (content.length > 60 ? '...' : '')
       await db.conversation.update({ where: { id }, data: { title } })
     }
-
-    // Ne PAS mettre à jour updatedAt manuellement — Prisma le fait via @updatedAt
 
     // Sérialisation défensive : convertir TOUS les Date en string ISO
     const responseData = {
@@ -170,10 +168,9 @@ export async function POST(
     const routeDuration = Date.now() - routeStart
 
     if (err instanceof AIError) {
-      console.error(`[Route] ❌ AIError — code: ${err.code}, modèle: ${err.model}, durée: ${err.duration}ms`)
+      console.error(`[Route] AIError — code: ${err.code}, modele: ${err.model}, duree: ${err.duration}ms`)
       console.error(`[Route]   Erreurs: ${err.errors.join(' | ')}`)
 
-      // Sérialisation sécurisée pour éviter l'erreur .toISOString()
       const errorBody = safeJsonStringify({
         success: false,
         error: err.message,
@@ -198,16 +195,15 @@ export async function POST(
     // Erreur générique (timeout, réseau, DB, etc.)
     const msg = err?.message || 'Erreur inconnue'
     const stack = err?.stack || ''
-    console.error(`[Route] ❌ Erreur générique: ${msg}`)
-    console.error(`[Route]   Stack: ${stack.slice(0, 800)}`)
-    console.error(`[Route]   Type d'erreur: ${err?.constructor?.name || 'unknown'}`)
-    console.error(`[Route]   Err complet:`, JSON.stringify({ name: err?.name, message: err?.message, constructor: err?.constructor?.name }, null, 2))
+    console.error(`[Route] Erreur generique: ${msg}`)
+    console.error(`[Route]   Type: ${err?.constructor?.name || 'unknown'}`)
+    console.error(`[Route]   Stack: ${stack.slice(0, 500)}`)
 
     if (msg.includes('timeout') || msg.includes('Abort') || msg.includes('ETIMEDOUT')) {
-      return error('Délai dépassé : la réponse a mis trop de temps. Réessayez.', 504)
+      return error('Delai depasse : la reponse a mis trop de temps. Reessayez.', 504)
     }
     if (msg.includes('fetch') || msg.includes('network') || msg.includes('ECONNREFUSED')) {
-      return error('Erreur réseau : impossible de joindre le service IA. Vérifiez votre connexion.', 503)
+      return error('Erreur reseau : impossible de joindre le service IA. Verifiez votre connexion.', 503)
     }
     return error(`Erreur interne du serveur : ${msg}`)
   }

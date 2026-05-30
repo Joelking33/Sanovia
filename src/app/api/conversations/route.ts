@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
-import { authenticate, success, created, error, isValidCategory, isValidLanguage } from '@/lib/middleware'
+import { authenticate, success, created, error, isValidCategory, isValidLanguage, toISO } from '@/lib/middleware'
 
 /**
  * GET /api/conversations
@@ -73,9 +73,13 @@ export async function GET(request: NextRequest) {
         language: conv.language,
         isArchived: conv.isArchived,
         messageCount: conv._count.messages,
-        lastMessage: conv.messages[0] || null,
-        createdAt: conv.createdAt,
-        updatedAt: conv.updatedAt
+        lastMessage: conv.messages[0] ? {
+          content: conv.messages[0].content,
+          createdAt: toISO(conv.messages[0].createdAt),
+          role: conv.messages[0].role
+        } : null,
+        createdAt: toISO(conv.createdAt),
+        updatedAt: toISO(conv.updatedAt)
       })),
       pagination: {
         page,
@@ -139,7 +143,7 @@ export async function POST(request: NextRequest) {
       category: conversation.category,
       language: conversation.language,
       messageCount: 0,
-      createdAt: conversation.createdAt
+      createdAt: toISO(conversation.createdAt)
     })
 
   } catch (err: any) {

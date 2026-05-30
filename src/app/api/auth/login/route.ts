@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyPassword, generateToken } from '@/lib/auth'
-import { badRequest, success, error, unauthorized } from '@/lib/middleware'
+import { badRequest, success, error, unauthorized, toISO } from '@/lib/middleware'
 
 /**
  * POST /api/auth/login
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
         avatarUrl: user.avatarUrl,
         language: user.language,
         role: user.role,
-        lastLoginAt: user.lastLoginAt
+        lastLoginAt: user.lastLoginAt ? toISO(user.lastLoginAt) : null
       },
       token
     })

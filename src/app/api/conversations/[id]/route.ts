@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
-import { authenticate, success, notFound, error, forbidden, badRequest } from '@/lib/middleware'
+import { authenticate, success, notFound, error, forbidden, badRequest, toISO } from '@/lib/middleware'
 
 /**
  * GET /api/conversations/[id]
@@ -54,10 +54,16 @@ export async function GET(
       category: conversation.category,
       language: conversation.language,
       isArchived: conversation.isArchived,
-      messages: conversation.messages,
+      messages: conversation.messages.map(msg => ({
+        id: msg.id,
+        role: msg.role,
+        content: msg.content,
+        language: msg.language,
+        createdAt: toISO(msg.createdAt)
+      })),
       messageCount: conversation.messages.length,
-      createdAt: conversation.createdAt,
-      updatedAt: conversation.updatedAt
+      createdAt: toISO(conversation.createdAt),
+      updatedAt: toISO(conversation.updatedAt)
     })
 
   } catch (err: any) {
@@ -114,7 +120,15 @@ export async function PATCH(
       data: updateData
     })
 
-    return success(conversation)
+    return success({
+      id: conversation.id,
+      title: conversation.title,
+      category: conversation.category,
+      language: conversation.language,
+      isArchived: conversation.isArchived,
+      createdAt: toISO(conversation.createdAt),
+      updatedAt: toISO(conversation.updatedAt)
+    })
   } catch (err: any) {
     console.error('[Conversation PATCH Error]', err)
     return error('Erreur lors de la mise à jour de la conversation.')
