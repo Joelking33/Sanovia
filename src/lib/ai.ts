@@ -778,7 +778,7 @@ export async function chatWithAI(
     geminiKey: hasGemKey,
     errors: [],
     retries: 0,
-    timestamp: new Date.now().toISOString(),
+    timestamp: new Date().toISOString(),
     ...overrides,
   })
 
