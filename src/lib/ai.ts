@@ -28,14 +28,14 @@ const CB_COOLDOWN          = 90_000   // 90s de cooldown
 const GEMINI_MODELS = ['gemini-2.0-flash', 'gemini-1.5-flash']
 
 const OPENROUTER_MODELS = [
-  'meta-llama/llama-4-scout:free',       // ✅ Fiable, rapide
-  'meta-llama/llama-4-maverick:free',    // ✅ Très bon
-  'qwen/qwen3-32b:free',                 // ✅ Excellent
-  'mistralai/mistral-small-3.1-24b-instruct:free', // ✅ Stable
-  'google/gemma-3-27b-it:free',          // ✅ Disponible
-  'deepseek/deepseek-chat-v3-0324:free', // ✅ Bon
-  'qwen/qwen-2.5-72b-instruct:free',     // ✅ Backup
-  'cognitivecomputations/dolphin3.0-mistral-24b:free', // ✅ Backup
+  'openrouter/free',                                    // ✅ Routeur gratuit auto (toujours dispo)
+  'qwen/qwen3-32b:free',                                // ✅ Excellent, contexte 1M
+  'deepseek/deepseek-chat-v3-0324:free',                // ✅ Très bon
+  'meta-llama/llama-4-maverick:free',                   // ✅ Meta Llama 4
+  'mistralai/mistral-small-3.1-24b-instruct:free',      // ✅ Mistral stable
+  'google/gemma-3-27b-it:free',                         // ✅ Google Gemma
+  'qwen/qwen-2.5-72b-instruct:free',                    // ✅ Backup Qwen
+  'deepseek/deepseek-r1:free',                          // ✅ Backup DeepSeek
 ]
 
 // ============================================================
@@ -206,9 +206,8 @@ const GREETING_RESPONSES: Record<string, string[]> = {
     "Coucou ! 👋 N'hésitez pas à me poser vos questions santé, je suis prêt à vous aider.",
   ],
   ba: [
-    "Moh Ayi o, Gna Ayi o ! 😊 Je suis Sanovia, votre assistant santé. Comment puis-je vous aider ?",
-    "Moh Ayi o, Gna Ayi o ! 👋 Je suis Sanovia. Posez-moi votre question santé, je suis là pour vous !",
-    "Moh Ayi o, Gna Ayi o ! 😊 Sanovia à votre service ! Quelle est votre question de santé ?",
+    "Ɔɛ ! 😊 Luɛ Sanoovia, i ka sran man baara la tɔɔrɔ. I bɛ ka dɛmɛ ?",
+    "Awôrɔ ! 👋 Luɛ Sanoovia. I ka sran man fɔn, a bɛ ka dɛmɛ !",
   ],
   dy: [
     "I kɛnɛ ! 😊 I tɔɔrɔ Sanoovia ye, i ka banjɛ ɛɛrɛ baara la tɔɔrɔ. I bɛ ka dɛmɛ ?",
@@ -243,8 +242,8 @@ const THANK_YOU_RESPONSES: Record<string, string[]> = {
     "Pas de quoi ! Votre santé compte. Si vous avez besoin d'autre chose, je suis là. 👋",
   ],
   ba: [
-    "Moh Kloua o, Gna Kloua o ! 😊 N'hésitez pas si vous avez d'autres questions santé.",
-    "Moh Kloua o, Gna Kloua o ! 💚 Prenez soin de vous !",
+    "A tɛ ɛnɛ ! 😊 I bɛ sɔrɔ ɛnɛ, i ka sran man fɔn.",
+    "A kɛrɛ ! 😊 I bɛ ka dɛmɛ, a tɛ ɛnɛ.",
   ],
   dy: [
     "A tɛ ɛnɛ ! 😊 I bɛ sɔrɔ ɛnɛ, i ka banjɛ fɔn.",
@@ -275,7 +274,7 @@ function isIdentityQuestion(message: string): boolean {
 
 const IDENTITY_RESPONSES: Record<string, string> = {
   fr: "Je suis Sanovia 🩺, votre assistant santé intelligent ! Je peux vous informer sur les maladies courantes en Côte d'Ivoire (paludisme, typhoïde, choléra...), la nutrition, la santé maternelle, les premiers secours et bien plus encore.\n\nAttention : je donne des informations générales, je ne remplace pas un vrai médecin. Pour toute urgence, appelez le SAMU au 185 ou les Pompiers au 180. 💚",
-  ba: "Moh Ayi o, Gna Ayi o ! 🩺 Je suis Sanovia, votre assistant santé !\n\nJe peux vous informer sur les maladies (paludisme...), la grossesse, les premiers secours et bien plus.\n\nAttention : je ne remplace pas un médecin. Urgences : SAMU 185 | Pompiers 180. 💚",
+  ba: "Luɛ Sanoovia 🩺, i ka sran man baara la tɔɔrɔ !\n\nI bɛ a fɔ : sran banna (paluditre...), kɛnɛ, glɔ glɔbɛlɛ...\n\nKunnafoni : a tɛ tɔɔrɔ kɛnɛ bɛɛ. SAMU 185, Pompiers 180. 💚",
   dy: "I tɔɔrɔ Sanoovia ye 🩺, i ka banjɛ ɛɛrɛ baara la tɔɔrɔ !\n\nI bɛ a fɔ : banjɛ banna (paludisme...), kɛnɛ, glɔ glɔbɛlɛ...\n\nKunnafoni : a tɔɔrɔ tɛ kɛnɛ bɛɛ. SAMU 185, Pompiers 180. 💚",
   bq: "Sanoovia yɛ 🩺, i ka sran man baara tɔɔrɔ !\n\nI bɛ a fɔ : sran banna (paludisme...), kɛnɛ, glɔ glɔbɛlɛ...\n\nKunnafoni : a tɛ tɔɔrɔ kɛnɛ bɛɛ. SAMU 185, Pompiers 180. 💚",
 }
@@ -301,21 +300,13 @@ STYLE DE RÉPONSE :
 - Contexte ivoirien : maladies locales, structures de santé, numéros d'urgence.
 - Utilise des sauts de ligne pour la lisibilité.`
 
-const BASE_SYSTEM_PROMPT_BA = `Tu es Sanovia, assistant santé pour la Côte d'Ivoire.
-
-Quand tu réponds en Baoulé, utilise la transcription phonétique populaire (comme on écrit sur WhatsApp), PAS l'alphabet officiel avec ses caractères spéciaux.
-Exemples de phonétique Baoulé :
-- Bonjour Madame = "Moh Ayi o"
-- Bonjour Monsieur = "Gna Ayi o"  
-- Merci Madame = "Moh Kloua o"
-- Merci Monsieur = "Gna Kloua o"
-Utilise le français pour les termes médicaux si nécessaire.
+const BASE_SYSTEM_PROMPT_BA = `Luɛ Sanoovia, sran man baara la tɔɔrɔ Côte d'Ivoire kunnafoniw la. A kɛrɛ n'u sɔrɔ.
 
 RÈGLES :
-- Tu n'es pas médecin, tu ne poses pas de diagnostic, tu ne prescris pas.
-- Informations santé uniquement : maladies, prévention, grossesse, premiers secours.
-- Questions hors santé : refuser poliment.
-- Urgences : SAMU 185, Pompiers 180.`
+- A tɛ tɔɔrɔ, a tɛ sran man kɔnɔkwɛn dɛmɛ, a tɛ kɔlɔlɔnw fɛsɛn.
+- Sran man kunnafoni : sran banna, kɛnɛ, glɔ glɔbɛlɛ, banjɛ...
+- Fɛn wɛrɛ tɛ a dɛmɛ.
+- Banjɛ kɛnɛnɛ : SAMU 185, Pompiers 180.`
 
 const BASE_SYSTEM_PROMPT_DY = `I tɔɔrɔ Sanoovia ye, banjɛ ɛɛrɛ baara la tɔɔrɔ Côte d'Ivoire la. A kɛrɛ ka dɛmɛ.
 
@@ -936,7 +927,7 @@ export async function diagnoseAPI(): Promise<Record<string, unknown>> {
           'X-Title':       'Sanovia Health AI',
         },
         body: JSON.stringify({
-          model:    'google/gemma-3-12b-it:free',
+          model:    'openrouter/free',
           messages: [{ role: 'user', content: 'Dire bonjour en une phrase.' }],
           max_tokens: 30,
         }),
