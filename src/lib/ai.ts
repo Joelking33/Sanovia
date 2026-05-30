@@ -927,7 +927,7 @@ export async function diagnoseAPI(): Promise<Record<string, unknown>> {
           'X-Title':       'Sanovia Health AI',
         },
         body: JSON.stringify({
-          model:    'google/gemma-3-12b-it:free',
+          model:    'meta-llama/llama-4-scout:free',
           messages: [{ role: 'user', content: 'Dire bonjour en une phrase.' }],
           max_tokens: 30,
         }),
