@@ -28,18 +28,14 @@ const CB_COOLDOWN          = 90_000   // 90s de cooldown
 const GEMINI_MODELS = ['gemini-2.0-flash', 'gemini-1.5-flash']
 
 const OPENROUTER_MODELS = [
-  'google/gemini-2.0-flash-001',
-  'google/gemma-3-27b-it:free',
-  'meta-llama/llama-4-scout:free',
-  'mistralai/mistral-small-3.1-24b-instruct:free',
-  'qwen/qwen3-32b:free',
-  'deepseek/deepseek-chat-v3-0324:free',
-  'google/gemma-3-12b-it:free',
-  'meta-llama/llama-4-maverick:free',
-  'qwen/qwen-2.5-72b-instruct:free',
-  'nousresearch/hermes-3-llama-3.1-405b:free',
-  'microsoft/phi-4-reasoning-plus:free',
-  'cognitivecomputations/dolphin3.0-mistral-24b:free',
+  'meta-llama/llama-4-scout:free',       // ✅ Fiable, rapide
+  'meta-llama/llama-4-maverick:free',    // ✅ Très bon
+  'qwen/qwen3-32b:free',                 // ✅ Excellent
+  'mistralai/mistral-small-3.1-24b-instruct:free', // ✅ Stable
+  'google/gemma-3-27b-it:free',          // ✅ Disponible
+  'deepseek/deepseek-chat-v3-0324:free', // ✅ Bon
+  'qwen/qwen-2.5-72b-instruct:free',     // ✅ Backup
+  'cognitivecomputations/dolphin3.0-mistral-24b:free', // ✅ Backup
 ]
 
 // ============================================================
