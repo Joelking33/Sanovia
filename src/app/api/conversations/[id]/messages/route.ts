@@ -1,7 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { authenticate, success, created, badRequest, notFound, forbidden, error } from '@/lib/middleware'
+import { authenticate, success, created, badRequest, notFound, forbidden, error, safeJsonStringify } from '@/lib/middleware'
 import { chatWithAI, AIError } from '@/lib/ai'
+
+// ═══════════════════════════════════════════════════════════
+// Utilitaire : conversion sécurisée Date → string ISO
+// Prévient l'erreur "toISOString is not a function"
+// ═══════════════════════════════════════════════════════════
+function toISO(val: unknown): string {
+  if (val instanceof Date) return val.toISOString()
+  if (typeof val === 'string' && val.length > 0) return val
+  return new Date().toISOString()
+}
 
 /**
  * GET /api/conversations/[id]/messages
@@ -43,7 +53,8 @@ export async function GET(
  * POST /api/conversations/[id]/messages
  * Envoyer un message et obtenir une réponse de Sanoovia IA
  *
- * Retourne le message utilisateur + la réponse IA + les métadonnées serveur brutes
+ * En cas de succès : retourne { success: true, data: { userMessage, assistantMessage, serverMeta } }
+ * En cas d'échec : retourne { success: false, error: "...", details: { code, errors, rawErrors, ... } }
  */
 export async function POST(
   request: NextRequest,
@@ -71,7 +82,7 @@ export async function POST(
       include: {
         messages: {
           orderBy: { createdAt: 'asc' },
-          take: 10,
+          take: 15,
           select: { role: true, content: true }
         }
       }
@@ -80,20 +91,7 @@ export async function POST(
     if (!conversation) return notFound('Conversation non trouvée.')
     if (conversation.userId !== auth.userId) return forbidden('Accès interdit.')
 
-    // ═══════════════════════════════════════════════════════════
-    // LOG BRUT — Requête reçue
-    // ═══════════════════════════════════════════════════════════
-    console.log('\n' + '╔' + '═'.repeat(68) + '╗')
-    console.log('║  [API ROUTE] POST /api/conversations/[id]/messages          ║')
-    console.log('╠' + '═'.repeat(68) + '╣')
-    console.log(`  📥 Message      : "${content.trim().slice(0, 80)}${content.length > 80 ? '...' : ''}"`)
-    console.log(`  🆔 Conversation  : ${id}`)
-    console.log(`  👤 Utilisateur   : ${auth.userId}`)
-    console.log(`  🌐 Langue        : ${conversation.language}`)
-    console.log(`  📂 Catégorie     : ${conversation.category}`)
-    console.log(`  📜 Historique    : ${conversation.messages.length} message(s) de contexte`)
-
-    // Sauvegarder le message de l'utilisateur
+    // Sauvegarder le message utilisateur
     const userMessage = await db.message.create({
       data: {
         conversationId: id,
@@ -102,10 +100,9 @@ export async function POST(
         language: conversation.language
       }
     })
-    console.log(`  💾 Message user  : sauvegardé (id: ${userMessage.id})`)
+    console.log(`[Route] Message utilisateur sauvegardé: id=${userMessage.id}, createdAt type=${typeof userMessage.createdAt}, isDate=${userMessage.createdAt instanceof Date}`)
 
-    // Générer la réponse de Sanoovia IA
-    console.log('  🤖 Appel chatWithAI en cours...')
+    // Générer la réponse IA
     const aiResponse = await chatWithAI(
       content.trim(),
       conversation.language,
@@ -116,30 +113,10 @@ export async function POST(
       }))
     )
 
-    // ═══════════════════════════════════════════════════════════
-    // LOG BRUT — Réponse IA reçue avec succès
-    // ═══════════════════════════════════════════════════════════
     const meta = aiResponse.metadata
-    console.log('╠' + '═'.repeat(68) + '╣')
-    console.log('║  [API ROUTE] RÉPONSE IA — SUCCÈS                             ║')
-    console.log('╠' + '═'.repeat(68) + '╣')
-    console.log(`  ✅ Statut        : SUCCÈS`)
-    console.log(`  📤 Source        : ${meta.source}`)
-    console.log(`  🤖 Fournisseur   : ${meta.provider}`)
-    console.log(`  🧠 Modèle        : ${meta.model}`)
-    console.log(`  ⏱️  Durée IA     : ${meta.duration}ms`)
-    console.log(`  ⏱️  Durée route  : ${Date.now() - routeStart}ms`)
-    console.log(`  📦 Taille réponse: ${aiResponse.content.length} caractères`)
-    console.log(`  📄 Contenu (300 premiers chars) :`)
-    console.log(`     "${aiResponse.content.slice(0, 300)}${aiResponse.content.length > 300 ? '...' : ''}"`)
-    console.log(`  🔑 OR clé       : ${meta.openRouterKey ? '✅' : '❌'}`)
-    console.log(`  🔑 Gemini clé    : ${meta.geminiKey ? '✅' : '❌'}`)
-    if (meta.errors.length > 0) {
-      console.log(`  ⚠️  Erreurs passées: [${meta.errors.join(', ')}]`)
-    }
-    console.log(`  🕐 Timestamp     : ${meta.timestamp}`)
+    console.log(`[Route] ✅ SUCCÈS — source: ${meta.source}, modèle: ${meta.model}, durée: ${meta.duration}ms`)
 
-    // Sauvegarder la réponse de l'IA
+    // Sauvegarder la réponse IA
     const assistantMessage = await db.message.create({
       data: {
         conversationId: id,
@@ -148,76 +125,56 @@ export async function POST(
         language: conversation.language
       }
     })
-    console.log(`  💾 Message IA    : sauvegardé (id: ${assistantMessage.id})`)
+    console.log(`[Route] Message assistant sauvegardé: id=${assistantMessage.id}, createdAt type=${typeof assistantMessage.createdAt}, isDate=${assistantMessage.createdAt instanceof Date}`)
 
     // Mettre à jour le titre si premier message
     if (conversation.messages.length === 0) {
       const title = content.trim().substring(0, 60) + (content.length > 60 ? '...' : '')
       await db.conversation.update({ where: { id }, data: { title } })
-      console.log(`  📝 Titre mis à jour: "${title}"`)
     }
 
-    await db.conversation.update({ where: { id }, data: { updatedAt: new Date() } })
+    // Ne PAS mettre à jour updatedAt manuellement — Prisma le fait via @updatedAt
 
-    console.log('╚' + '═'.repeat(68) + '╝\n')
-
-    return created({
+    // Sérialisation défensive : convertir TOUS les Date en string ISO
+    const responseData = {
       userMessage: {
         id: userMessage.id,
         role: userMessage.role,
         content: userMessage.content,
         language: userMessage.language,
-        createdAt: userMessage.createdAt
+        createdAt: toISO(userMessage.createdAt)
       },
       assistantMessage: {
         id: assistantMessage.id,
         role: assistantMessage.role,
         content: assistantMessage.content,
         language: assistantMessage.language,
-        createdAt: assistantMessage.createdAt
+        createdAt: toISO(assistantMessage.createdAt)
       },
-      // ─── Métadonnées brutes du serveur ───
       serverMeta: {
         source: meta.source,
         provider: meta.provider,
         model: meta.model,
         duration: meta.duration,
         cached: meta.cached,
-        openRouterKey: meta.openRouterKey,
-        geminiKey: meta.geminiKey,
+        hasApiKey: meta.hasApiKey,
         errors: meta.errors,
+        rawErrors: meta.rawErrors,
         timestamp: meta.timestamp,
       }
-    })
+    }
+
+    return created(responseData)
 
   } catch (err: any) {
-    // ═══════════════════════════════════════════════════════════
-    // LOG BRUT — Erreur interceptée
-    // ═══════════════════════════════════════════════════════════
     const routeDuration = Date.now() - routeStart
 
-    console.log('╠' + '═'.repeat(68) + '╣')
-    console.log('║  [API ROUTE] RÉPONSE IA — ÉCHEC                              ║')
-    console.log('╠' + '═'.repeat(68) + '╣')
-    console.log(`  ❌ Statut        : ÉCHEC`)
-    console.log(`  ⏱️  Durée route  : ${routeDuration}ms`)
-    console.log(`  🕐 Timestamp     : ${new Date().toISOString()}`)
-
-    // Vérifier si c'est une AIError structurée
     if (err instanceof AIError) {
-      console.log(`  💥 Type erreur    : AIError (structurée)`)
-      console.log(`  🔑 Code          : ${err.code}`)
-      console.log(`  🤖 Fournisseur   : ${err.provider}`)
-      console.log(`  🧠 Modèle        : ${err.model}`)
-      console.log(`  ⏱️  Durée IA     : ${err.duration}ms`)
-      console.log(`  🔑 OR clé       : ${err.openRouterKey ? '✅' : '❌'}`)
-      console.log(`  🔑 Gemini clé    : ${err.geminiKey ? '✅' : '❌'}`)
-      console.log(`  📋 Erreurs       : [${err.errors.join(', ')}]`)
-      console.log(`  📄 Message       : ${err.message}`)
+      console.error(`[Route] ❌ AIError — code: ${err.code}, modèle: ${err.model}, durée: ${err.duration}ms`)
+      console.error(`[Route]   Erreurs: ${err.errors.join(' | ')}`)
 
-      console.log('╚' + '═'.repeat(68) + '╝\n')
-
-      return NextResponse.json({
+      // Sérialisation sécurisée pour éviter l'erreur .toISOString()
+      const errorBody = safeJsonStringify({
         success: false,
         error: err.message,
         details: {
@@ -225,28 +182,33 @@ export async function POST(
           provider: err.provider,
           model: err.model,
           duration: err.duration,
-          openRouterKey: err.openRouterKey,
-          geminiKey: err.geminiKey,
+          routeDuration,
+          hasApiKey: err.hasApiKey,
           errors: err.errors,
+          rawErrors: err.rawErrors,
           timestamp: err.timestamp,
         }
-      }, { status: 502 })
+      })
+      return new NextResponse(errorBody, {
+        status: 502,
+        headers: { 'Content-Type': 'application/json' }
+      })
     }
 
-    // Erreur générique (timeout, réseau, etc.)
+    // Erreur générique (timeout, réseau, DB, etc.)
     const msg = err?.message || 'Erreur inconnue'
-    console.log(`  💥 Type erreur    : Error (générique)`)
-    console.log(`  📄 Message brut   : ${msg}`)
-    console.log(`  📄 Stack (500 chars): ${(err?.stack || '').slice(0, 500)}`)
-
-    console.log('╚' + '═'.repeat(68) + '╝\n')
+    const stack = err?.stack || ''
+    console.error(`[Route] ❌ Erreur générique: ${msg}`)
+    console.error(`[Route]   Stack: ${stack.slice(0, 800)}`)
+    console.error(`[Route]   Type d'erreur: ${err?.constructor?.name || 'unknown'}`)
+    console.error(`[Route]   Err complet:`, JSON.stringify({ name: err?.name, message: err?.message, constructor: err?.constructor?.name }, null, 2))
 
     if (msg.includes('timeout') || msg.includes('Abort') || msg.includes('ETIMEDOUT')) {
-      return error('Délai dépassé : la réponse de Sanovia a mis trop de temps. Vérifiez votre connexion et réessayez.', 504)
+      return error('Délai dépassé : la réponse a mis trop de temps. Réessayez.', 504)
     }
-    if (msg.includes('fetch') || msg.includes('network') || msg.includes('ECONNREFUSED') || msg.includes('ENOTFOUND')) {
-      return error('Erreur réseau : impossible de joindre le service IA. Vérifiez votre connexion internet et réessayez.', 503)
+    if (msg.includes('fetch') || msg.includes('network') || msg.includes('ECONNREFUSED')) {
+      return error('Erreur réseau : impossible de joindre le service IA. Vérifiez votre connexion.', 503)
     }
-    return error(`Erreur interne : ${msg}. Réessayez dans quelques instants.`)
+    return error(`Erreur interne du serveur : ${msg}`)
   }
 }

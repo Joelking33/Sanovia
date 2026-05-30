@@ -15,6 +15,43 @@ export function isValidCategory(category: string): boolean {
 }
 
 // ============================================================
+// SÉRIALISATION JSON SÉCURISÉE
+// Prévient l'erreur "toISOString is not a function"
+// lors de la sérialisation des objets Date de Prisma
+// ============================================================
+
+/**
+ * Replacer JSON qui convertit les objets Date en chaînes ISO.
+ * Les objets Date Prisma sont passés par référence et peuvent
+ * poser problème avec JSON.stringify() dans certains runtimes.
+ */
+const dateReplacer = (_key: string, value: unknown): unknown => {
+  if (value instanceof Date) {
+    try {
+      return value.toISOString()
+    } catch {
+      return new Date().toISOString()
+    }
+  }
+  return value
+}
+
+export function safeJsonStringify(data: unknown): string {
+  try {
+    return JSON.stringify(data, dateReplacer)
+  } catch (err) {
+    console.error('[safeJsonStringify] Erreur de sérialisation:', err)
+    // Fallback : convertir les dates manuellement
+    return JSON.stringify(data, (_key, value) => {
+      if (value && typeof value === 'object' && 'toISOString' in value) {
+        try { return (value as Date).toISOString() } catch { return String(value) }
+      }
+      return value
+    })
+  }
+}
+
+// ============================================================
 // MIDDLEWARE D'AUTHENTIFICATION
 // ============================================================
 
@@ -62,33 +99,62 @@ export async function optionalAuth(request: NextRequest) {
 
 // ============================================================
 // HANDLERS DE RÉPONSES API STANDARDISÉS
+// Utilisent safeJsonStringify pour éviter les erreurs Date
 // ============================================================
 
 export function success(data: unknown, status = 200) {
-  return NextResponse.json({ success: true, data }, { status })
+  const body = safeJsonStringify({ success: true, data })
+  return new NextResponse(body, {
+    status,
+    headers: { 'Content-Type': 'application/json' }
+  })
 }
 
 export function created(data: unknown) {
-  return NextResponse.json({ success: true, data }, { status: 201 })
+  const body = safeJsonStringify({ success: true, data })
+  return new NextResponse(body, {
+    status: 201,
+    headers: { 'Content-Type': 'application/json' }
+  })
 }
 
 export function badRequest(message: string) {
-  return NextResponse.json({ success: false, error: message }, { status: 400 })
+  const body = safeJsonStringify({ success: false, error: message })
+  return new NextResponse(body, {
+    status: 400,
+    headers: { 'Content-Type': 'application/json' }
+  })
 }
 
 export function unauthorized(message = 'Authentification requise.') {
-  return NextResponse.json({ success: false, error: message }, { status: 401 })
+  const body = safeJsonStringify({ success: false, error: message })
+  return new NextResponse(body, {
+    status: 401,
+    headers: { 'Content-Type': 'application/json' }
+  })
 }
 
 export function forbidden(message = 'Accès interdit.') {
-  return NextResponse.json({ success: false, error: message }, { status: 403 })
+  const body = safeJsonStringify({ success: false, error: message })
+  return new NextResponse(body, {
+    status: 403,
+    headers: { 'Content-Type': 'application/json' }
+  })
 }
 
 export function notFound(message = 'Ressource non trouvée.') {
-  return NextResponse.json({ success: false, error: message }, { status: 404 })
+  const body = safeJsonStringify({ success: false, error: message })
+  return new NextResponse(body, {
+    status: 404,
+    headers: { 'Content-Type': 'application/json' }
+  })
 }
 
 export function error(message: string, status = 500) {
   console.error(`[API Error ${status}] ${message}`)
-  return NextResponse.json({ success: false, error: message }, { status })
+  const body = safeJsonStringify({ success: false, error: message })
+  return new NextResponse(body, {
+    status,
+    headers: { 'Content-Type': 'application/json' }
+  })
 }
