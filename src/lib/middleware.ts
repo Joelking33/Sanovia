@@ -24,44 +24,21 @@ export function isValidCategory(category: string): boolean {
 // sur des objets Date non-standards (certains drivers Neon/pgBouncer).
 // ============================================================
 
-export function toISO(val: unknown): string {
-  // Cas 1 : vrai objet Date JavaScript
-  if (val instanceof Date) {
-    try {
-      return val.toISOString()
-    } catch {
-      // Fallback si toISOString est cassé
-      return new Date(val.getTime()).toISOString()
-    }
+export function toISO(date: Date | string | null | undefined): string | null {
+  if (!date) return null
+
+  // Déjà une string ISO → on la retourne directement
+  if (typeof date === 'string') return date
+
+  // Objet Date valide
+  if (date instanceof Date) {
+    if (isNaN(date.getTime())) return null // Date invalide
+    return date.toISOString()
   }
-  // Cas 2 : déjà une string ISO
-  if (typeof val === 'string' && val.length > 0) {
-    return val
-  }
-  // Cas 3 : objet date-like (non-standard, ex: Prisma proxy)
-  if (val !== null && typeof val === 'object') {
-    try {
-      // Essayer getTime() (existe sur les vrais Dates et certains proxies)
-      if (typeof (val as any).getTime === 'function') {
-        const ts = (val as any).getTime()
-        if (typeof ts === 'number' && isFinite(ts)) {
-          return new Date(ts).toISOString()
-        }
-      }
-      // Essayer toISOString() directement
-      if (typeof (val as any).toISOString === 'function') {
-        return (val as any).toISOString()
-      }
-    } catch {
-      // Ignorer les erreurs, on passera au fallback
-    }
-  }
-  // Cas 4 : number (timestamp)
-  if (typeof val === 'number' && isFinite(val)) {
-    return new Date(val).toISOString()
-  }
-  // Fallback ultime
-  return new Date().toISOString()
+
+  // Fallback (timestamp number, etc.)
+  const d = new Date(date)
+  return isNaN(d.getTime()) ? null : d.toISOString()
 }
 
 // ============================================================
