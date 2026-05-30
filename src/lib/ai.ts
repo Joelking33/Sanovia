@@ -28,14 +28,15 @@ const CB_COOLDOWN          = 90_000   // 90s de cooldown
 const GEMINI_MODELS = ['gemini-2.0-flash', 'gemini-1.5-flash']
 
 const OPENROUTER_MODELS = [
-  'meta-llama/llama-4-scout:free',       // ✅ Fiable, rapide
-  'meta-llama/llama-4-maverick:free',    // ✅ Très bon
-  'qwen/qwen3-32b:free',                 // ✅ Excellent
-  'mistralai/mistral-small-3.1-24b-instruct:free', // ✅ Stable
-  'google/gemma-3-27b-it:free',          // ✅ Disponible
-  'deepseek/deepseek-chat-v3-0324:free', // ✅ Bon
-  'qwen/qwen-2.5-72b-instruct:free',     // ✅ Backup
-  'cognitivecomputations/dolphin3.0-mistral-24b:free', // ✅ Backup
+  'openrouter/auto',                                      // ✅ Auto-routing OpenRouter (toujours disponible)
+  'openai/gpt-oss-20b:free',                              // ✅ Confirmé Mai 2026
+  'qwen/qwen3-32b:free',                                  // ✅ Excellent, contexte 1M
+  'deepseek/deepseek-chat-v3-0324:free',                  // ✅ Très bon
+  'meta-llama/llama-4-maverick:free',                     // ✅ Meta Llama 4
+  'mistralai/mistral-small-3.1-24b-instruct:free',        // ✅ Mistral stable
+  'google/gemma-3-27b-it:free',                           // ✅ Google Gemma
+  'qwen/qwen-2.5-72b-instruct:free',                      // ✅ Backup Qwen
+  'deepseek/deepseek-r1:free',                            // ✅ Backup DeepSeek
 ]
 
 // ============================================================
@@ -927,7 +928,7 @@ export async function diagnoseAPI(): Promise<Record<string, unknown>> {
           'X-Title':       'Sanovia Health AI',
         },
         body: JSON.stringify({
-          model:    'meta-llama/llama-4-scout:free',
+          model:    'openrouter/auto',
           messages: [{ role: 'user', content: 'Dire bonjour en une phrase.' }],
           max_tokens: 30,
         }),
