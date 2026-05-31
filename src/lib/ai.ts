@@ -28,14 +28,14 @@ const CB_COOLDOWN          = 90_000   // 90s de cooldown
 const GEMINI_MODELS = ['gemini-2.0-flash', 'gemini-1.5-flash']
 
 const OPENROUTER_MODELS = [
-  'openrouter/free',                                    // ✅ Routeur gratuit auto (toujours dispo)
-  'qwen/qwen3-32b:free',                                // ✅ Excellent, contexte 1M
-  'deepseek/deepseek-chat-v3-0324:free',                // ✅ Très bon
-  'meta-llama/llama-4-maverick:free',                   // ✅ Meta Llama 4
-  'mistralai/mistral-small-3.1-24b-instruct:free',      // ✅ Mistral stable
-  'google/gemma-3-27b-it:free',                         // ✅ Google Gemma
-  'qwen/qwen-2.5-72b-instruct:free',                    // ✅ Backup Qwen
-  'deepseek/deepseek-r1:free',                          // ✅ Backup DeepSeek
+  'openrouter/free',
+  'qwen/qwen3-32b:free',
+  'deepseek/deepseek-chat-v3-0324:free',
+  'meta-llama/llama-4-maverick:free',
+  'mistralai/mistral-small-3.1-24b-instruct:free',
+  'google/gemma-3-27b-it:free',
+  'qwen/qwen-2.5-72b-instruct:free',
+  'deepseek/deepseek-r1:free',
 ]
 
 // ============================================================
@@ -206,12 +206,13 @@ const GREETING_RESPONSES: Record<string, string[]> = {
     "Coucou ! 👋 N'hésitez pas à me poser vos questions santé, je suis prêt à vous aider.",
   ],
   ba: [
-    "Ɔɛ ! 😊 Luɛ Sanoovia, i ka sran man baara la tɔɔrɔ. I bɛ ka dɛmɛ ?",
-    "Awôrɔ ! 👋 Luɛ Sanoovia. I ka sran man fɔn, a bɛ ka dɛmɛ !",
+    "Moh Ayi o, Gna Ayi o ! 😊 Je suis Sanovia. Ô ouka lê ti yè wou o lê. Ô wou ti pka ?",
+    "Moh Ayi o, Gna Ayi o ! 👋 Je suis Sanovia, ô ouka lê ti yè wou o lê !",
+    "Moh Ayi o, Gna Ayi o ! 😊 Ô wou ti pka ? Posez-moi votre question santé !",
   ],
   dy: [
-    "I kɛnɛ ! 😊 I tɔɔrɔ Sanoovia ye, i ka banjɛ ɛɛrɛ baara la tɔɔrɔ. I bɛ ka dɛmɛ ?",
-    "N baara ! 👋 Sanoovia don. I ka banjɛ fɔn, a bɛ ka dɛmɛ !",
+    "Anisôgôman ! 😊 Je suis Sanovia. N'beyi qui daimais. I fari bê ?",
+    "Anisôgôman ! 👋 Je suis Sanovia. I fari bê ? N'beyi qui daimais !",
   ],
   bq: [
     "E kɛ ! 😊 Sanoovia yɛ, i ka sran man baara tɔɔrɔ. I bɛ ka dɛmɛ ?",
@@ -242,12 +243,12 @@ const THANK_YOU_RESPONSES: Record<string, string[]> = {
     "Pas de quoi ! Votre santé compte. Si vous avez besoin d'autre chose, je suis là. 👋",
   ],
   ba: [
-    "A tɛ ɛnɛ ! 😊 I bɛ sɔrɔ ɛnɛ, i ka sran man fɔn.",
-    "A kɛrɛ ! 😊 I bɛ ka dɛmɛ, a tɛ ɛnɛ.",
+    "Moh Kloua o, Gna Kloua o ! 😊 Nian a wou sou ! N'hésitez pas si vous avez d'autres questions.",
+    "Moh Kloua o, Gna Kloua o ! 💚 Nian a wou sou !",
   ],
   dy: [
-    "A tɛ ɛnɛ ! 😊 I bɛ sɔrɔ ɛnɛ, i ka banjɛ fɔn.",
-    "A kɛrɛ ! 😊 I bɛ ka dɛmɛ.",
+    "Anitché ! 😊 Iyairai kororchi ! N'hésitez pas si vous avez d'autres questions. 💚",
+    "Anitché ! 💚 Iyairai kororchi !",
   ],
   bq: [
     "A tɛ ɛnɛ ! 😊 I bɛ sɔrɔ ɛnɛ, i ka sran fɔn.",
@@ -283,125 +284,12 @@ const IDENTITY_RESPONSES: Record<string, string> = {
 // 5. PROMPTS SYSTÈME
 // ============================================================
 
-
-// ============================================================
-// 5. FILTRE HORS-SUJET — Détection questions non-santé
-// ============================================================
-
-/**
- * Mots-clés qui indiquent clairement une question de SANTÉ.
- * Si un de ces mots est présent → on laisse passer même si un mot hors-sujet aussi présent.
- */
-const HEALTH_KEYWORDS = [
-  // Maladies & symptômes
-  'maladie','maladies','symptôme','symptômes','douleur','douleurs','fièvre',
-  'toux','vomis','diarrhée','sang','saigne','blessure','blessé','brûlure',
-  'fracture','allergie','infection','virus','bactérie','parasite','gonflement',
-  'fatigue','vertige','malaise','convulsion','paralysie','plaie','cicatrice',
-  // Maladies spécifiques
-  'paludisme','malaria','typhoïde','choléra','tuberculose','sida','vih','covid',
-  'diabète','hypertension','tension','cancer','asthme','ulcère','hépatite',
-  'méningite','rougeole','varicelle','grippe','angine','pneumonie','arthrite',
-  // Santé maternelle
-  'grossesse','enceinte','accouchement','bébé','nourrisson','allaitement',
-  'maternité','trimestre','fœtus','contraception','règles','menstruation',
-  'fécondation','stérilité','fertilité','avortement','fausse couche',
-  // Soins & traitement
-  'médicament','traitement','ordonnance','consultation','médecin','docteur',
-  'infirmier','pharmacie','hôpital','clinique','centre de santé','vaccin',
-  'vaccination','opération','chirurgie','radiographie','analyse','prise de sang',
-  'antibiotique','antidouleur','sirop','comprimé','injection','perfusion',
-  // Premiers secours
-  'urgence','secours','samu','pompiers','premiers secours','réanimation',
-  'étouffement','noyade','électrocution','empoisonnement','intoxication',
-  'bandage','pansement','massage cardiaque','défibrillateur',
-  // Nutrition & bien-être
-  'nutrition','aliment','régime','vitamine','minéral','protéine','calorie',
-  'obésité','minceur','poids','alimentation','hydratation','eau potable',
-  // Santé mentale
-  'dépression','anxiété','stress','insomnie','sommeil','psychologie',
-  'psychiatrie','mental','suicide','automutilation','trouble','angoisse',
-  'addiction','alcool','drogue','tabac','sevrage',
-  // Corps & anatomie
-  'corps','organe','cœur','poumon','foie','rein','cerveau','muscle','os',
-  'peau','sang','urine','selles','tension artérielle','glycémie','poids',
-  // Prévention & hygiène
-  'prévention','hygiène','propreté','moustiquaire','eau potable','sanitaire',
-  // Santé sexuelle
-  'mst','ist','préservatif','contraceptif','sexuel','sexe','reproduction',
-]
-
-/**
- * Mots-clés qui indiquent clairement une question HORS-SANTÉ.
- */
-const OFF_TOPIC_KEYWORDS = [
-  // Politique
-  'politique','élection','président','gouvernement','parti','vote','parlement',
-  'ministre','loi','constitution','état','guerre','armée','militaire',
-  // Sport (sauf blessures)
-  'football','ballon','match','score','but','joueur','équipe','championnat',
-  'coupe du monde','ligue','transfert','entraîneur','stade','basketball','tennis',
-  'handball','rugby','olympique','jeux olympiques','athlétisme',
-  // Divertissement
-  'film','cinéma','série','acteur','actrice','musique','chanson','artiste',
-  'concert','album','clip','dance','tiktok','instagram','youtube',
-  'jeu vidéo','gaming','playstation','xbox','nintendo',
-  // Finance
-  'bourse','action','investissement','crypto','bitcoin','argent','banque',
-  'prêt','crédit','économie','inflation','monnaie','dette','salaire',
-  // Technologie non-médicale
-  'téléphone','ordinateur','internet','réseau','wifi','application','logiciel',
-  'intelligence artificielle','robot','voiture','moto','électricité',
-  // Autre
-  'météo','temps','pluie','soleil','voyage','tourisme','hôtel','restaurant',
-  'cuisine','recette','mode','vêtement','beauté','coiffure','mariage',
-  'divorce','religion','dieu','prière','histoire','géographie','mathématique',
-  'physique','chimie','littérature','philosophie','école','université',
-]
-
-const OFF_TOPIC_RESPONSES: Record<string, string> = {
-  fr: "Je suis Sanovia, votre assistant dédié uniquement à la santé. 🩺\n\nJe ne peux pas répondre à cette question car elle ne concerne pas la santé.\n\nN'hésitez pas à me poser des questions sur :\n- Les maladies et leurs symptômes\n- La prévention et l'hygiène\n- La grossesse et la santé maternelle\n- Les premiers secours\n- La nutrition et le bien-être\n\n💚 Comment puis-je vous aider en matière de santé ?",
-  ba: "Moh Ayi o, Gna Ayi o ! 🩺 Je suis Sanovia, assistant santé uniquement.\n\nJe ne réponds qu'aux questions de santé. Posez-moi une question médicale ! 💚",
-  dy: "Je suis Sanovia, assistant santé. 🩺 Je réponds uniquement aux questions de santé.\n\nPosez-moi une question sur les maladies, la prévention ou les soins ! 💚",
-  bq: "Je suis Sanovia, assistant santé. 🩺 Je réponds uniquement aux questions de santé.\n\nPosez-moi une question médicale ! 💚",
-}
-
-/**
- * Vérifie si le message est lié à la santé.
- * Retourne true = question santé → traiter normalement.
- * Retourne false = hors-sujet → refuser poliment.
- */
-function isHealthRelated(message: string): boolean {
-  const msg = message.toLowerCase().trim()
-  const words = msg.split(/\s+/)
-
-  // Messages très courts (< 3 mots) → laisser passer (probablement une suite de conversation)
-  if (words.length < 3) return true
-
-  // Si un mot-clé santé est présent → toujours laisser passer
-  const hasHealthKeyword = HEALTH_KEYWORDS.some(k => msg.includes(k))
-  if (hasHealthKeyword) return true
-
-  // Compter les mots-clés hors-sujet
-  const offTopicCount = OFF_TOPIC_KEYWORDS.filter(k => msg.includes(k)).length
-
-  // Si 2+ mots-clés hors-sujet sans aucun mot santé → refuser
-  if (offTopicCount >= 2) return false
-
-  // 1 mot hors-sujet dans un message long → refuser
-  if (offTopicCount >= 1 && words.length > 5) return false
-
-  // Par défaut → laisser passer (on fait confiance au prompt strict)
-  return true
-}
-
-
 const BASE_SYSTEM_PROMPT_FR = `Tu es Sanovia, un assistant santé intelligent et bienveillant pour les utilisateurs en Côte d'Ivoire. Tu es humain, chaleureux et naturel dans tes réponses — pas robotique.
 
 RÈGLES FONDAMENTALES :
 - Tu n'es PAS un médecin. Tu ne poses JAMAIS de diagnostic ni ne prescris de médicaments.
 - Tu réponds aux questions de santé : maladies, prévention, nutrition, santé mentale, grossesse, premiers secours.
-- Tu réponds UNIQUEMENT aux questions de santé. Pour tout autre sujet (politique, sport, finance, technologie, cuisine, voyage, divertissement...), tu refuses SYSTÉMATIQUEMENT et tu invites l'utilisateur à poser une question de santé. Ne fais AUCUNE exception.
+- Tu refuses poliment les questions hors sujet (politique, sport, finances...) en disant simplement que tu es spécialisé en santé.
 - En cas d'urgence vitale, mentionne en premier : "URGENCE — Appelez le SAMU : 185 ou les Pompiers : 180."
 
 STYLE DE RÉPONSE :
@@ -413,21 +301,82 @@ STYLE DE RÉPONSE :
 - Contexte ivoirien : maladies locales, structures de santé, numéros d'urgence.
 - Utilise des sauts de ligne pour la lisibilité.`
 
-const BASE_SYSTEM_PROMPT_BA = `Luɛ Sanoovia, sran man baara la tɔɔrɔ Côte d'Ivoire kunnafoniw la. A kɛrɛ n'u sɔrɔ.
+const BASE_SYSTEM_PROMPT_BA = `Tu es Sanovia, assistant santé pour la Côte d'Ivoire.
+Tu réponds UNIQUEMENT aux questions de santé. Pour tout autre sujet, refuse poliment.
+Tu ne poses JAMAIS de diagnostic et ne prescris JAMAIS de médicaments.
 
-RÈGLES :
-- A tɛ tɔɔrɔ, a tɛ sran man kɔnɔkwɛn dɛmɛ, a tɛ kɔlɔlɔnw fɛsɛn.
-- Sran man kunnafoni : sran banna, kɛnɛ, glɔ glɔbɛlɛ, banjɛ...
-- Fɛn wɛrɛ tɛ a dɛmɛ.
-- Banjɛ kɛnɛnɛ : SAMU 185, Pompiers 180.`
+LANGUE — BAOULÉ PHONÉTIQUE POPULAIRE OBLIGATOIRE :
+Écris TOUJOURS en phonétique baoulé populaire (comme sur WhatsApp), jamais en alphabet officiel.
+Pour les mots du quotidien absents du glossaire, crée ta propre phonétique baoulé en t'inspirant du style du glossaire (sons simples, accents, pas de caractères spéciaux). Les termes médicaux internationaux (hypertension, diabète, tuberculose, etc.) peuvent rester en français.
 
-const BASE_SYSTEM_PROMPT_DY = `I tɔɔrɔ Sanoovia ye, banjɛ ɛɛrɛ baara la tɔɔrɔ Côte d'Ivoire la. A kɛrɛ ka dɛmɛ.
+GLOSSAIRE BAOULÉ VÉRIFIÉ (utilise ces expressions en priorité) :
+Salutations :
+- Bonjour Madame = Moh Ayi o / Bonjour Monsieur = Gna Ayi o
+- Merci Madame = Moh Kloua o / Merci Monsieur = Gna Kloua o
+- Comment vas-tu ? = Ô wou ti pka ?
+- Je suis là pour t'aider = Ô ouka lê ti yè wou o lê
+- Prends soin de toi = Nian a wou sou
 
-RÈGLES :
-- A tɔɔrɔ tɛ ye, a banjɛ ɛɛrɛ diagnostic tɛ kɛ, a kɔlɔlɔnw tɛ fɛsɛn.
-- Banjɛ ɛɛrɛ kunnafoni : banjɛ banna, kɛnɛ, glɔ glɔbɛlɛ...
-- Fɛn wɛrɛ tɛ a dɛmɛ.
-- Banjɛ kɛnɛnɛ : SAMU 185, Pompiers 180.`
+Santé & symptômes :
+- Tu es malade = Ô wounin yé ô ya
+- Tu as de la fièvre = Ô wounin do
+- Tu as mal à la tête = A ti yo ô ya
+- Tu as mal au ventre = Ô kloun yo ô ya
+- Tu as mal au dos = Ô si yo ô ya
+- Tu as mal à la poitrine = Ô wé yo ô ya
+- Tu as la toux = A bo tangô
+- Tu as de la fatigue = A fèli
+- Tu as des vomissements = A fi
+- Tu as la diarrhée = A lê n'zo n'guiè
+- Tu as le paludisme = A lê djaikouhadjo
+- Tu as la typhoïde = A lê djaikouhadjo kéklé
+- Tu es enceinte = A ti kouè fouè
+
+Soins :
+- Médicament = Aré / Prends ton médicament = Non ô aré
+- Médecin = Dôhôtrô sran / Hôpital = Dôhôtrô / Urgence = Dôhôtrô
+- Va chez le médecin = Kô nian dôhôtrô sran
+
+Corps :
+- Tête = Ti / Ventre = Kloun / Poitrine = Wé / Dos = Si
+- Ton/Ta = Ô / Leur = Bé / Vos = Amé
+
+URGENCES : SAMU 185 | Pompiers 180`
+
+const BASE_SYSTEM_PROMPT_DY = `Tu es Sanovia, assistant santé pour la Côte d'Ivoire.
+Tu réponds UNIQUEMENT aux questions de santé. Pour tout autre sujet, refuse poliment.
+Tu ne poses JAMAIS de diagnostic et ne prescris JAMAIS de médicaments.
+
+LANGUE — DIOULA PHONÉTIQUE POPULAIRE OBLIGATOIRE :
+Écris TOUJOURS en phonétique dioula populaire (comme sur WhatsApp), jamais en alphabet officiel.
+Pour les mots du quotidien absents du glossaire, crée ta propre phonétique dioula en t'inspirant du style du glossaire (sons simples, accents, pas de caractères spéciaux). Les termes médicaux internationaux (hypertension, diabète, tuberculose, etc.) peuvent rester en français.
+
+GLOSSAIRE DIOULA VÉRIFIÉ (utilise ces expressions en priorité) :
+Salutations :
+- Bonjour = Anisôgôman
+- Merci = Anitché
+- Comment vas-tu ? = I fari bê ?
+- Je suis là pour t'aider = N'beyi qui daimais
+- Prends soin de toi = Iyairai kororchi
+
+Santé & symptômes :
+- Tu es malade = I menkainai
+- Tu as de la fièvre = I fari gbanna
+- Tu as mal à la tête = I coukolo bi diminan
+- Tu as mal au ventre = I konnon bi diminan
+- Tu as la toux = Sorgorsorgor bi là
+- Tu as de la fatigue = I sèguaila
+- Tu as des vomissements = Vonnon lorgor bi là
+- Tu as la diarrhée = I konnon bé borila
+- Tu as le paludisme = Soumaya bi là
+- Tu es enceinte = I kônonman lé
+
+Soins :
+- Médicament = Fla / Prends ton médicament = I ya fla ta
+- Médecin = Dortoror tchai / Hôpital = Dortoror sô / Urgence = Dortoror sô
+- Va chez le médecin = Ta dortoror tchai fai
+
+URGENCES : SAMU 185 | Pompiers 180`
 
 const BASE_SYSTEM_PROMPT_BQ = `Sanoovia yɛ, sran man baara tɔɔrɔ Côte d'Ivoire. A kɛrɛ ka wle.
 
@@ -924,14 +873,6 @@ export async function chatWithAI(
     const content = IDENTITY_RESPONSES[language] ?? IDENTITY_RESPONSES.fr
     console.log('[SANOVIA] ✅ IDENTITÉ')
     return { content, metadata: buildMeta({ source: 'identity' }) }
-  }
-
-  // ─── 3.5 Filtre hors-sujet ───────────────────────────────
-  if (!isHealthRelated(userMessage)) {
-    const content = OFF_TOPIC_RESPONSES[language] ?? OFF_TOPIC_RESPONSES.fr
-    console.log('[SANOVIA] ⛔ HORS-SUJET — refus')
-    cache.set(userMessage, language, content)
-    return { content, metadata: buildMeta({ source: 'offline' }) }
   }
 
   const systemPrompt   = getSystemPrompt(language, category)
