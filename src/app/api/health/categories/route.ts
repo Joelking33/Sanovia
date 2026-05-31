@@ -53,108 +53,108 @@ export async function GET(request: NextRequest) {
       ba: [
         {
           id: 'premiers_secours',
-          name: 'Kɔlɔlɔnw',
-          description: 'Kɔlɔlɔnw baara',
+          name: 'Kololonw',
+          description: 'Kololonw baara',
           icon: 'heart-pulse',
           subcategories: [
-            { id: 'brulures', name: 'Ɔrɔ' },
-            { id: 'coupures', name: 'Fɛn banna' },
-            { id: 'saignements', name: 'Sɔrɔn' },
-            { id: 'etouffement', name: 'Dɔgɔkɛnɛ' },
-            { id: 'fractures', name: 'U bɛ nɛnɛ' },
-            { id: 'morsures', name: 'U yɛ fɛn' },
+            { id: 'brulures', name: 'Oro' },
+            { id: 'coupures', name: 'Fen banna' },
+            { id: 'saignements', name: 'Soron' },
+            { id: 'etouffement', name: 'Dogokene' },
+            { id: 'fractures', name: 'U be nene' },
+            { id: 'morsures', name: 'U ye fen' },
             { id: 'allergies', name: 'Banna baara' },
-            { id: 'noyade', name: 'Nɛ' },
-            { id: 'chaleur', name: 'Flɛ' },
-            { id: 'empoisonnement', name: 'Fɛn ɔrɔn' }
+            { id: 'noyade', name: 'Ne' },
+            { id: 'chaleur', name: 'Fle' },
+            { id: 'empoisonnement', name: 'Fen oron' }
           ]
         },
         {
           id: 'grossesse',
-          name: 'Glɔ',
-          description: 'Glɔ baara',
+          name: 'Glo',
+          description: 'Glo baara',
           icon: 'baby',
           subcategories: [
-            { id: 'trimestre1', name: 'Kɛnɛ flɛ' },
-            { id: 'trimestre2', name: 'Kɛnɛ filanan' },
-            { id: 'trimestre3', name: 'Kɛnɛ saba' },
-            { id: 'alimentation', name: 'Kɛnɛ' },
-            { id: 'signes_alerte', name: 'Kan man sɔrɔ' },
-            { id: 'preparation_accouchement', name: 'Glɔ baara' },
-            { id: 'post_partum', name: 'Glɔ kɛfɛ' },
-            { id: 'allaitement', name: 'Glɔ' }
+            { id: 'trimestre1', name: 'Kene fle' },
+            { id: 'trimestre2', name: 'Kene filanan' },
+            { id: 'trimestre3', name: 'Kene saba' },
+            { id: 'alimentation', name: 'Kene' },
+            { id: 'signes_alerte', name: 'Kan man soro' },
+            { id: 'preparation_accouchement', name: 'Glo baara' },
+            { id: 'post_partum', name: 'Glo kefe' },
+            { id: 'allaitement', name: 'Glo' }
           ]
         }
       ],
       dy: [
         {
           id: 'premiers_secours',
-          name: 'Banjɛ ɛɛrɛ',
-          description: 'Banjɛ ɛɛrɛ la dɛmɛ',
+          name: 'Banje eere',
+          description: 'Banje eere la deme',
           icon: 'heart-pulse',
           subcategories: [
-            { id: 'brulures', name: 'Ɔrɔ' },
-            { id: 'coupures', name: 'Fɛn banna' },
-            { id: 'saignements', name: 'Sɔrɔn' },
-            { id: 'etouffement', name: 'Dɔgɔkɛnɛ' },
-            { id: 'fractures', name: 'U bɛ nɛnɛ' },
-            { id: 'morsures', name: 'U yɛ fɛn' },
+            { id: 'brulures', name: 'Oro' },
+            { id: 'coupures', name: 'Fen banna' },
+            { id: 'saignements', name: 'Soron' },
+            { id: 'etouffement', name: 'Dogokene' },
+            { id: 'fractures', name: 'U be nene' },
+            { id: 'morsures', name: 'U ye fen' },
             { id: 'allergies', name: 'Banna baara' },
-            { id: 'noyade', name: 'Nɛ' },
-            { id: 'chaleur', name: 'Flɛ' },
-            { id: 'empoisonnement', name: 'Fɛn ɔrɔn' }
+            { id: 'noyade', name: 'Ne' },
+            { id: 'chaleur', name: 'Fle' },
+            { id: 'empoisonnement', name: 'Fen oron' }
           ]
         },
         {
           id: 'grossesse',
-          name: 'Glɔ',
-          description: 'Glɔ baara',
+          name: 'Glo',
+          description: 'Glo baara',
           icon: 'baby',
           subcategories: [
-            { id: 'trimestre1', name: 'Kɛnɛ flɛ' },
-            { id: 'trimestre2', name: 'Kɛnɛ filanan' },
-            { id: 'trimestre3', name: 'Kɛnɛ saba' },
-            { id: 'alimentation', name: 'Kɛnɛ' },
-            { id: 'signes_alerte', name: 'Kan man sɔrɔ' },
-            { id: 'preparation_accouchement', name: 'Glɔ baara' },
-            { id: 'post_partum', name: 'Glɔ kɛfɛ' },
-            { id: 'allaitement', name: 'Glɔ' }
+            { id: 'trimestre1', name: 'Kene fle' },
+            { id: 'trimestre2', name: 'Kene filanan' },
+            { id: 'trimestre3', name: 'Kene saba' },
+            { id: 'alimentation', name: 'Kene' },
+            { id: 'signes_alerte', name: 'Kan man soro' },
+            { id: 'preparation_accouchement', name: 'Glo baara' },
+            { id: 'post_partum', name: 'Glo kefe' },
+            { id: 'allaitement', name: 'Glo' }
           ]
         }
       ],
       bq: [
         {
           id: 'premiers_secours',
-          name: 'Kɔlɔlɔnw',
-          description: 'Kɔlɔlɔnw baara',
+          name: 'Kololonw',
+          description: 'Kololonw baara',
           icon: 'heart-pulse',
           subcategories: [
-            { id: 'brulures', name: 'Ɔrɔ' },
-            { id: 'coupures', name: 'Fɛn banna' },
-            { id: 'saignements', name: 'Sɔrɔn' },
-            { id: 'etouffement', name: 'Dɔgɔkɛnɛ' },
-            { id: 'fractures', name: 'U bɛ nɛnɛ' },
-            { id: 'morsures', name: 'U yɛ fɛn' },
+            { id: 'brulures', name: 'Oro' },
+            { id: 'coupures', name: 'Fen banna' },
+            { id: 'saignements', name: 'Soron' },
+            { id: 'etouffement', name: 'Dogokene' },
+            { id: 'fractures', name: 'U be nene' },
+            { id: 'morsures', name: 'U ye fen' },
             { id: 'allergies', name: 'Banna baara' },
-            { id: 'noyade', name: 'Nɛ' },
-            { id: 'chaleur', name: 'Flɛ' },
-            { id: 'empoisonnement', name: 'Fɛn ɔrɔn' }
+            { id: 'noyade', name: 'Ne' },
+            { id: 'chaleur', name: 'Fle' },
+            { id: 'empoisonnement', name: 'Fen oron' }
           ]
         },
         {
           id: 'grossesse',
-          name: 'Glɔ',
-          description: 'Glɔ baara',
+          name: 'Glo',
+          description: 'Glo baara',
           icon: 'baby',
           subcategories: [
-            { id: 'trimestre1', name: 'Kɛnɛ flɛ' },
-            { id: 'trimestre2', name: 'Kɛnɛ filanan' },
-            { id: 'trimestre3', name: 'Kɛnɛ saba' },
-            { id: 'alimentation', name: 'Kɛnɛ' },
-            { id: 'signes_alerte', name: 'Kan man sɔrɔ' },
-            { id: 'preparation_accouchement', name: 'Glɔ baara' },
-            { id: 'post_partum', name: 'Glɔ kɛfɛ' },
-            { id: 'allaitement', name: 'Glɔ' }
+            { id: 'trimestre1', name: 'Kene fle' },
+            { id: 'trimestre2', name: 'Kene filanan' },
+            { id: 'trimestre3', name: 'Kene saba' },
+            { id: 'alimentation', name: 'Kene' },
+            { id: 'signes_alerte', name: 'Kan man soro' },
+            { id: 'preparation_accouchement', name: 'Glo baara' },
+            { id: 'post_partum', name: 'Glo kefe' },
+            { id: 'allaitement', name: 'Glo' }
           ]
         }
       ]
