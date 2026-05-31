@@ -283,12 +283,125 @@ const IDENTITY_RESPONSES: Record<string, string> = {
 // 5. PROMPTS SYSTÈME
 // ============================================================
 
+
+// ============================================================
+// 5. FILTRE HORS-SUJET — Détection questions non-santé
+// ============================================================
+
+/**
+ * Mots-clés qui indiquent clairement une question de SANTÉ.
+ * Si un de ces mots est présent → on laisse passer même si un mot hors-sujet aussi présent.
+ */
+const HEALTH_KEYWORDS = [
+  // Maladies & symptômes
+  'maladie','maladies','symptôme','symptômes','douleur','douleurs','fièvre',
+  'toux','vomis','diarrhée','sang','saigne','blessure','blessé','brûlure',
+  'fracture','allergie','infection','virus','bactérie','parasite','gonflement',
+  'fatigue','vertige','malaise','convulsion','paralysie','plaie','cicatrice',
+  // Maladies spécifiques
+  'paludisme','malaria','typhoïde','choléra','tuberculose','sida','vih','covid',
+  'diabète','hypertension','tension','cancer','asthme','ulcère','hépatite',
+  'méningite','rougeole','varicelle','grippe','angine','pneumonie','arthrite',
+  // Santé maternelle
+  'grossesse','enceinte','accouchement','bébé','nourrisson','allaitement',
+  'maternité','trimestre','fœtus','contraception','règles','menstruation',
+  'fécondation','stérilité','fertilité','avortement','fausse couche',
+  // Soins & traitement
+  'médicament','traitement','ordonnance','consultation','médecin','docteur',
+  'infirmier','pharmacie','hôpital','clinique','centre de santé','vaccin',
+  'vaccination','opération','chirurgie','radiographie','analyse','prise de sang',
+  'antibiotique','antidouleur','sirop','comprimé','injection','perfusion',
+  // Premiers secours
+  'urgence','secours','samu','pompiers','premiers secours','réanimation',
+  'étouffement','noyade','électrocution','empoisonnement','intoxication',
+  'bandage','pansement','massage cardiaque','défibrillateur',
+  // Nutrition & bien-être
+  'nutrition','aliment','régime','vitamine','minéral','protéine','calorie',
+  'obésité','minceur','poids','alimentation','hydratation','eau potable',
+  // Santé mentale
+  'dépression','anxiété','stress','insomnie','sommeil','psychologie',
+  'psychiatrie','mental','suicide','automutilation','trouble','angoisse',
+  'addiction','alcool','drogue','tabac','sevrage',
+  // Corps & anatomie
+  'corps','organe','cœur','poumon','foie','rein','cerveau','muscle','os',
+  'peau','sang','urine','selles','tension artérielle','glycémie','poids',
+  // Prévention & hygiène
+  'prévention','hygiène','propreté','moustiquaire','eau potable','sanitaire',
+  // Santé sexuelle
+  'mst','ist','préservatif','contraceptif','sexuel','sexe','reproduction',
+]
+
+/**
+ * Mots-clés qui indiquent clairement une question HORS-SANTÉ.
+ */
+const OFF_TOPIC_KEYWORDS = [
+  // Politique
+  'politique','élection','président','gouvernement','parti','vote','parlement',
+  'ministre','loi','constitution','état','guerre','armée','militaire',
+  // Sport (sauf blessures)
+  'football','ballon','match','score','but','joueur','équipe','championnat',
+  'coupe du monde','ligue','transfert','entraîneur','stade','basketball','tennis',
+  'handball','rugby','olympique','jeux olympiques','athlétisme',
+  // Divertissement
+  'film','cinéma','série','acteur','actrice','musique','chanson','artiste',
+  'concert','album','clip','dance','tiktok','instagram','youtube',
+  'jeu vidéo','gaming','playstation','xbox','nintendo',
+  // Finance
+  'bourse','action','investissement','crypto','bitcoin','argent','banque',
+  'prêt','crédit','économie','inflation','monnaie','dette','salaire',
+  // Technologie non-médicale
+  'téléphone','ordinateur','internet','réseau','wifi','application','logiciel',
+  'intelligence artificielle','robot','voiture','moto','électricité',
+  // Autre
+  'météo','temps','pluie','soleil','voyage','tourisme','hôtel','restaurant',
+  'cuisine','recette','mode','vêtement','beauté','coiffure','mariage',
+  'divorce','religion','dieu','prière','histoire','géographie','mathématique',
+  'physique','chimie','littérature','philosophie','école','université',
+]
+
+const OFF_TOPIC_RESPONSES: Record<string, string> = {
+  fr: "Je suis Sanovia, votre assistant dédié uniquement à la santé. 🩺\n\nJe ne peux pas répondre à cette question car elle ne concerne pas la santé.\n\nN'hésitez pas à me poser des questions sur :\n- Les maladies et leurs symptômes\n- La prévention et l'hygiène\n- La grossesse et la santé maternelle\n- Les premiers secours\n- La nutrition et le bien-être\n\n💚 Comment puis-je vous aider en matière de santé ?",
+  ba: "Moh Ayi o, Gna Ayi o ! 🩺 Je suis Sanovia, assistant santé uniquement.\n\nJe ne réponds qu'aux questions de santé. Posez-moi une question médicale ! 💚",
+  dy: "Je suis Sanovia, assistant santé. 🩺 Je réponds uniquement aux questions de santé.\n\nPosez-moi une question sur les maladies, la prévention ou les soins ! 💚",
+  bq: "Je suis Sanovia, assistant santé. 🩺 Je réponds uniquement aux questions de santé.\n\nPosez-moi une question médicale ! 💚",
+}
+
+/**
+ * Vérifie si le message est lié à la santé.
+ * Retourne true = question santé → traiter normalement.
+ * Retourne false = hors-sujet → refuser poliment.
+ */
+function isHealthRelated(message: string): boolean {
+  const msg = message.toLowerCase().trim()
+  const words = msg.split(/\s+/)
+
+  // Messages très courts (< 3 mots) → laisser passer (probablement une suite de conversation)
+  if (words.length < 3) return true
+
+  // Si un mot-clé santé est présent → toujours laisser passer
+  const hasHealthKeyword = HEALTH_KEYWORDS.some(k => msg.includes(k))
+  if (hasHealthKeyword) return true
+
+  // Compter les mots-clés hors-sujet
+  const offTopicCount = OFF_TOPIC_KEYWORDS.filter(k => msg.includes(k)).length
+
+  // Si 2+ mots-clés hors-sujet sans aucun mot santé → refuser
+  if (offTopicCount >= 2) return false
+
+  // 1 mot hors-sujet dans un message long → refuser
+  if (offTopicCount >= 1 && words.length > 5) return false
+
+  // Par défaut → laisser passer (on fait confiance au prompt strict)
+  return true
+}
+
+
 const BASE_SYSTEM_PROMPT_FR = `Tu es Sanovia, un assistant santé intelligent et bienveillant pour les utilisateurs en Côte d'Ivoire. Tu es humain, chaleureux et naturel dans tes réponses — pas robotique.
 
 RÈGLES FONDAMENTALES :
 - Tu n'es PAS un médecin. Tu ne poses JAMAIS de diagnostic ni ne prescris de médicaments.
 - Tu réponds aux questions de santé : maladies, prévention, nutrition, santé mentale, grossesse, premiers secours.
-- Tu refuses poliment les questions hors sujet (politique, sport, finances...) en disant simplement que tu es spécialisé en santé.
+- Tu réponds UNIQUEMENT aux questions de santé. Pour tout autre sujet (politique, sport, finance, technologie, cuisine, voyage, divertissement...), tu refuses SYSTÉMATIQUEMENT et tu invites l'utilisateur à poser une question de santé. Ne fais AUCUNE exception.
 - En cas d'urgence vitale, mentionne en premier : "URGENCE — Appelez le SAMU : 185 ou les Pompiers : 180."
 
 STYLE DE RÉPONSE :
@@ -811,6 +924,14 @@ export async function chatWithAI(
     const content = IDENTITY_RESPONSES[language] ?? IDENTITY_RESPONSES.fr
     console.log('[SANOVIA] ✅ IDENTITÉ')
     return { content, metadata: buildMeta({ source: 'identity' }) }
+  }
+
+  // ─── 3.5 Filtre hors-sujet ───────────────────────────────
+  if (!isHealthRelated(userMessage)) {
+    const content = OFF_TOPIC_RESPONSES[language] ?? OFF_TOPIC_RESPONSES.fr
+    console.log('[SANOVIA] ⛔ HORS-SUJET — refus')
+    cache.set(userMessage, language, content)
+    return { content, metadata: buildMeta({ source: 'offline' }) }
   }
 
   const systemPrompt   = getSystemPrompt(language, category)
