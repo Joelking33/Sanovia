@@ -1500,9 +1500,9 @@ function ChatView() {
                       <div className="flex flex-col items-end gap-1 flex-shrink-0">
                         <span className="text-[10px]" style={{ color: '#484f58' }}>{formatDate(conv.updatedAt || conv.createdAt, currentLang)}</span>
                         <button onClick={(e) => handleDeleteConv(conv.id, e)}
-                          className="opacity-0 group-hover:opacity-100 w-5 h-5 rounded flex items-center justify-center text-[10px] transition-all cursor-pointer hover:bg-red-500/20"
+                          className="opacity-100 md:opacity-0 md:group-hover:opacity-100 w-5 h-5 rounded flex items-center justify-center text-[10px] transition-all cursor-pointer hover:bg-red-500/20"
                           style={{ color: '#ef4444' }}>
-                          ✕
+                          🗑️
                         </button>
                       </div>
                     </div>
