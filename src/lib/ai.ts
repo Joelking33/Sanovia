@@ -27,6 +27,68 @@ const CB_COOLDOWN          = 90_000   // 90s de cooldown
 
 const GEMINI_MODELS = ['gemini-2.0-flash', 'gemini-1.5-flash']
 
+// ============================================================
+// 0. SYSTÈME D'APPRENTISSAGE EN TEMPS RÉEL
+//    Les réponses approuvées sont stockées et réinjectées
+//    automatiquement dans les futurs prompts comme exemples.
+// ============================================================
+
+// Stockage en mémoire (persiste pendant la session serveur)
+const LEARNING_STORE: Record<string, Array<{ q: string; a: string; ts: string }>> = {}
+
+function learningKey(language: string, category: string): string {
+  return `${language}:${category}`
+}
+
+/** Ajouter une réponse approuvée comme exemple d'apprentissage */
+export function approveResponse(
+  language: string,
+  category: string,
+  question: string,
+  response: string
+): { stored: boolean; total: number } {
+  const key = learningKey(language, category)
+  if (!LEARNING_STORE[key]) LEARNING_STORE[key] = []
+
+  // Éviter les doublons exacts
+  const exists = LEARNING_STORE[key].some(
+    (e) => e.q.toLowerCase().trim() === question.toLowerCase().trim()
+  )
+  if (!exists) {
+    LEARNING_STORE[key].unshift({
+      q:  question.substring(0, 200),
+      a:  response.substring(0, 600),
+      ts: new Date().toISOString(),
+    })
+    // Garder max 10 exemples par clé
+    LEARNING_STORE[key] = LEARNING_STORE[key].slice(0, 10)
+    console.log(`[LEARNING] ✅ Exemple stocké → ${key} (total: ${LEARNING_STORE[key].length})`)
+  }
+
+  return { stored: !exists, total: LEARNING_STORE[key]?.length ?? 0 }
+}
+
+/** Récupérer les exemples stockés pour injection dans le prompt */
+function getLearningExamples(language: string, category: string): string {
+  const key = learningKey(language, category)
+  const examples = LEARNING_STORE[key] ?? []
+  if (examples.length === 0) return ''
+
+  const lines = examples
+    .slice(0, 3) // Injecter max 3 exemples
+    .map((e, i) => `Exemple ${i + 1} :\nQ: ${e.q}\nA: ${e.a}`)
+    .join('\n\n')
+
+  return `\n\n📚 EXEMPLES DE QUALITÉ APPROUVÉS (suis ce style) :\n${lines}`
+}
+
+/** Statistiques d'apprentissage */
+export function getLearningStats(): Record<string, number> {
+  return Object.fromEntries(
+    Object.entries(LEARNING_STORE).map(([k, v]) => [k, v.length])
+  )
+}
+
 const OPENROUTER_MODELS = [
   'openrouter/free',
   'qwen/qwen3-32b:free',
@@ -301,13 +363,27 @@ STYLE DE RÉPONSE :
 - Contexte ivoirien : maladies locales, structures de santé, numéros d'urgence.
 - Utilise des sauts de ligne pour la lisibilité.`
 
-const BASE_SYSTEM_PROMPT_BA = `Tu es Sanovia, assistant santé pour la Côte d'Ivoire.
+const BASE_SYSTEM_PROMPT_BA = `Tu es Sanovia, assistant santé bienveillant pour la Côte d'Ivoire.
+Tu es humain, chaleureux et naturel — pas robotique.
 Tu réponds UNIQUEMENT aux questions de santé. Pour tout autre sujet, refuse poliment.
 Tu ne poses JAMAIS de diagnostic et ne prescris JAMAIS de médicaments.
 
 LANGUE — BAOULÉ PHONÉTIQUE POPULAIRE OBLIGATOIRE :
 Écris TOUJOURS en phonétique baoulé populaire (comme sur WhatsApp), jamais en alphabet officiel.
-Pour les mots du quotidien absents du glossaire, crée ta propre phonétique baoulé en t'inspirant du style du glossaire (sons simples, accents, pas de caractères spéciaux). Les termes médicaux internationaux (hypertension, diabète, tuberculose, etc.) peuvent rester en français.
+Pour les mots courants absents du glossaire, crée ta propre phonétique baoulé inspirée du style du glossaire. Les termes médicaux internationaux (hypertension, diabète, etc.) peuvent rester en français.
+
+FORMAT & LONGUEUR — EXACTEMENT COMME EN FRANÇAIS :
+- Adapte la longueur à la question : 2-3 phrases si simple, 1-2 paragraphes si complexe
+- JAMAIS de réponse trop courte ou vague — donne des informations utiles et complètes
+- Utilise des sauts de ligne pour la lisibilité
+- Utilise des emojis occasionnellement (🩺, 💊, 💚, ⚠️, 🏥)
+- Structure tes réponses : symptômes → causes → prévention → traitement → quand consulter
+- Pour les urgences : SAMU 185 | Pompiers 180 EN PREMIER
+- Termine les sujets sérieux par "Ces informations ne remplacent pas un médecin."
+
+EXEMPLES DE STYLE :
+❌ Trop court (INTERDIT) : "A lê djaikouhadjo. Kô dôhôtrô."
+✅ Correct : "A lê djaikouhadjo 🦟. Ô wounin do, a fèli, a lê n'zo n'guiè yé bé ya tché. Non ô aré antipaludéen, kô nian dôhôtrô sran tché tché. Si ô wounin do très fort ou ô wounin yé ô ya beaucoup, kô dôhôtrô urgent — SAMU 185. 💚 Ces informations ne remplacent pas un médecin." 
 
 GLOSSAIRE BAOULÉ VÉRIFIÉ (utilise ces expressions en priorité) :
 Salutations :
@@ -343,13 +419,27 @@ Corps :
 
 URGENCES : SAMU 185 | Pompiers 180`
 
-const BASE_SYSTEM_PROMPT_DY = `Tu es Sanovia, assistant santé pour la Côte d'Ivoire.
+const BASE_SYSTEM_PROMPT_DY = `Tu es Sanovia, assistant santé bienveillant pour la Côte d'Ivoire.
+Tu es humain, chaleureux et naturel — pas robotique.
 Tu réponds UNIQUEMENT aux questions de santé. Pour tout autre sujet, refuse poliment.
 Tu ne poses JAMAIS de diagnostic et ne prescris JAMAIS de médicaments.
 
 LANGUE — DIOULA PHONÉTIQUE POPULAIRE OBLIGATOIRE :
 Écris TOUJOURS en phonétique dioula populaire (comme sur WhatsApp), jamais en alphabet officiel.
-Pour les mots du quotidien absents du glossaire, crée ta propre phonétique dioula en t'inspirant du style du glossaire (sons simples, accents, pas de caractères spéciaux). Les termes médicaux internationaux (hypertension, diabète, tuberculose, etc.) peuvent rester en français.
+Pour les mots courants absents du glossaire, crée ta propre phonétique dioula inspirée du style du glossaire. Les termes médicaux internationaux (hypertension, diabète, etc.) peuvent rester en français.
+
+FORMAT & LONGUEUR — EXACTEMENT COMME EN FRANÇAIS :
+- Adapte la longueur à la question : 2-3 phrases si simple, 1-2 paragraphes si complexe
+- JAMAIS de réponse trop courte ou vague — donne des informations utiles et complètes
+- Utilise des sauts de ligne pour la lisibilité
+- Utilise des emojis occasionnellement (🩺, 💊, 💚, ⚠️, 🏥)
+- Structure tes réponses : symptômes → causes → prévention → traitement → quand consulter
+- Pour les urgences : SAMU 185 | Pompiers 180 EN PREMIER
+- Termine les sujets sérieux par "Ces informations ne remplacent pas un médecin."
+
+EXEMPLES DE STYLE :
+❌ Trop court (INTERDIT) : "Soumaya bi là. Ta dortoror tchai."
+✅ Correct : "Soumaya bi là 🦟. I fari gbanna, I sèguaila, I konnon bé borila... I ya fla ta antipaludéen. Ta dortoror tchai fai tché. Si I fari gbanna beaucoup, kô SAMU 185. 💚 Ces informations ne remplacent pas un médecin." 
 
 GLOSSAIRE DIOULA VÉRIFIÉ (utilise ces expressions en priorité) :
 Salutations :
@@ -875,7 +965,9 @@ export async function chatWithAI(
     return { content, metadata: buildMeta({ source: 'identity' }) }
   }
 
+  // ─── Injection apprentissage ────────────────────────────
   const systemPrompt   = getSystemPrompt(language, category)
+                       + getLearningExamples(language, category)
   const collectedErrors: string[]    = []
   const collectedRaw:    string[]    = []
 
