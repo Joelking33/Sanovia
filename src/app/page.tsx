@@ -1131,8 +1131,15 @@ function ChatView() {
   // Feedback apprentissage — tracker quels messages ont été approuvés/rejetés
   const [feedbackGiven, setFeedbackGiven] = useState<Set<string>>(new Set())
   const [feedbackNegative, setFeedbackNegative] = useState<Set<string>>(new Set())
-  const [correcting, setCorrecting] = useState<string | null>(null) // id du message en cours de correction
+  const [correcting, setCorrecting] = useState<string | null>(null)
   const [correctionText, setCorrectionText] = useState('')
+  const [correctionValidating, setCorrectionValidating] = useState(false)
+  const [correctionResult, setCorrectionResult] = useState<Record<string, {
+    status: 'approved' | 'rejected' | 'uncertain'
+    reason: string
+    confidence: number
+    sources: string[]
+  }>>({})
 
   // Fetch conversations on mount
   useEffect(() => {
@@ -1177,28 +1184,53 @@ function ChatView() {
 
   // Soumettre la correction
   const handleSubmitCorrection = async (msg: any) => {
-    if (!correctionText.trim()) return
+    if (!correctionText.trim() || correctionValidating) return
     const msgs = currentConversation?.messages ?? []
     const idx = msgs.findIndex((m: any) => m.id === msg.id)
     const question = idx > 0 ? msgs[idx - 1]?.content ?? '' : ''
+
+    setCorrectionValidating(true)
+
     try {
-      await fetch('/api/feedback', {
+      const res = await fetch('/api/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           question,
-          response: correctionText.trim(),
-          language: msg.language ?? currentLang,
+          response:         correctionText.trim(),
+          language:         msg.language ?? currentLang,
           category,
-          type: 'correction',
+          type:             'correction',
           originalResponse: msg.content,
         }),
       })
+
+      const data = await res.json()
+      const payload = data?.data ?? data
+
+      // Stocker le résultat de validation pour affichage
+      setCorrectionResult(prev => ({
+        ...prev,
+        [msg.id]: {
+          status:     payload.status     ?? 'uncertain',
+          reason:     payload.reason     ?? '',
+          confidence: payload.confidence ?? 0,
+          sources:    payload.sources    ?? [],
+        }
+      }))
+
       setFeedbackNegative(prev => new Set([...prev, msg.id]))
       setCorrecting(null)
       setCorrectionText('')
+
     } catch (err) {
       console.error('[Feedback Correction] Erreur:', err)
+      setCorrectionResult(prev => ({
+        ...prev,
+        [msg.id]: { status: 'uncertain', reason: 'Erreur réseau', confidence: 0, sources: [] }
+      }))
+    } finally {
+      setCorrectionValidating(false)
     }
   }
 
@@ -1761,50 +1793,114 @@ function ChatView() {
                               </span>
                             </div>
                           )}
-                          {feedbackNegative.has(msg.id) && (
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <TTSPlayButton text={msg.content} language={msg.language} />
-                              <span className="text-[11px] px-2 py-1 rounded-lg"
-                                style={{ background: 'rgba(239,68,68,.12)', color: '#f87171' }}>
-                                🔄 Correction enregistrée — l'IA va s'améliorer !
-                              </span>
-                            </div>
-                          )}
+                          {feedbackNegative.has(msg.id) && (() => {
+                            const r = correctionResult[msg.id]
+                            if (!r) return (
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <TTSPlayButton text={msg.content} language={msg.language} />
+                                <span className="text-[11px] px-2 py-1 rounded-lg"
+                                  style={{ background: 'rgba(239,68,68,.12)', color: '#f87171' }}>
+                                  🔄 Correction envoyée
+                                </span>
+                              </div>
+                            )
+                            // Approuvé
+                            if (r.status === 'approved') return (
+                              <div className="mt-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <TTSPlayButton text={msg.content} language={msg.language} />
+                                  <span className="text-[11px] px-2 py-1 rounded-lg"
+                                    style={{ background: 'rgba(0,198,167,.12)', color: '#00c6a7' }}>
+                                    ✅ Correction validée ({r.confidence}%) — l'IA va s'améliorer !
+                                  </span>
+                                </div>
+                                {r.reason && (
+                                  <p className="text-[10px] mt-1 ml-1" style={{ color: '#484f58' }}>
+                                    🔍 {r.reason}
+                                    {r.sources?.length > 0 && ` · Sources : ${r.sources.slice(0,2).join(', ')}`}
+                                  </p>
+                                )}
+                              </div>
+                            )
+                            // Rejeté
+                            if (r.status === 'rejected') return (
+                              <div className="mt-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <TTSPlayButton text={msg.content} language={msg.language} />
+                                  <span className="text-[11px] px-2 py-1 rounded-lg"
+                                    style={{ background: 'rgba(239,68,68,.12)', color: '#f87171' }}>
+                                    ❌ Correction rejetée par l'IA
+                                  </span>
+                                </div>
+                                {r.reason && (
+                                  <p className="text-[10px] mt-1 ml-1" style={{ color: '#f87171', opacity: 0.7 }}>
+                                    Raison : {r.reason}
+                                  </p>
+                                )}
+                              </div>
+                            )
+                            // Incertain
+                            return (
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <TTSPlayButton text={msg.content} language={msg.language} />
+                                <span className="text-[11px] px-2 py-1 rounded-lg"
+                                  style={{ background: 'rgba(245,158,11,.12)', color: '#f59e0b' }}>
+                                  ⚠️ Correction incertaine — non utilisée ({r.confidence}%)
+                                </span>
+                              </div>
+                            )
+                          })()}
 
                           {/* Zone de correction */}
                           {correcting === msg.id && (
                             <div className="mt-2 rounded-xl p-3"
                               style={{ background: 'rgba(239,68,68,.06)', border: '1px solid rgba(239,68,68,.2)' }}>
-                              <p className="text-[11px] mb-2" style={{ color: '#f87171' }}>
+                              <p className="text-[11px] mb-1" style={{ color: '#f87171' }}>
                                 ✏️ Quelle aurait été la bonne réponse ?
+                              </p>
+                              <p className="text-[10px] mb-2" style={{ color: '#484f58' }}>
+                                🔍 L'IA vérifiera automatiquement ta correction sur internet avant de l'utiliser.
                               </p>
                               <textarea
                                 value={correctionText}
                                 onChange={e => setCorrectionText(e.target.value)}
                                 placeholder="Écris la réponse correcte ici..."
                                 rows={3}
-                                className="w-full text-[12px] px-3 py-2 rounded-lg resize-none outline-none"
+                                disabled={correctionValidating}
+                                className="w-full text-[12px] px-3 py-2 rounded-lg resize-none outline-none disabled:opacity-50"
                                 style={{
                                   background: 'rgba(255,255,255,.05)',
                                   color: '#e6edf3',
                                   border: '1px solid rgba(255,255,255,.08)',
                                 }}
                               />
-                              <div className="flex gap-2 mt-2">
-                                <button
-                                  onClick={() => handleSubmitCorrection(msg)}
-                                  disabled={!correctionText.trim()}
-                                  className="text-[11px] px-3 py-1.5 rounded-lg font-medium transition-all disabled:opacity-40"
-                                  style={{ background: '#00c6a7', color: '#fff' }}>
-                                  Envoyer la correction
-                                </button>
-                                <button
-                                  onClick={() => { setCorrecting(null); setCorrectionText('') }}
-                                  className="text-[11px] px-3 py-1.5 rounded-lg transition-all"
-                                  style={{ background: 'rgba(255,255,255,.06)', color: '#8b949e' }}>
-                                  Annuler
-                                </button>
-                              </div>
+                              {correctionValidating && (
+                                <div className="flex items-center gap-2 mt-2 text-[11px]"
+                                  style={{ color: '#f59e0b' }}>
+                                  <svg className="animate-spin w-3 h-3" viewBox="0 0 24 24" fill="none">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                                  </svg>
+                                  🔍 L'IA vérifie ta correction sur internet…
+                                </div>
+                              )}
+                              {!correctionValidating && (
+                                <div className="flex gap-2 mt-2">
+                                  <button
+                                    onClick={() => handleSubmitCorrection(msg)}
+                                    disabled={!correctionText.trim()}
+                                    className="text-[11px] px-3 py-1.5 rounded-lg font-medium transition-all disabled:opacity-40"
+                                    style={{ background: '#00c6a7', color: '#fff' }}>
+                                    Envoyer la correction
+                                  </button>
+                                  <button
+                                    onClick={() => { setCorrecting(null); setCorrectionText('') }}
+                                    className="text-[11px] px-3 py-1.5 rounded-lg transition-all"
+                                    style={{ background: 'rgba(255,255,255,.06)', color: '#8b949e' }}>
+                                    Annuler
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
