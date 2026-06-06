@@ -1108,6 +1108,13 @@ function ChatView() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [darkMode, setDarkMode] = useState(true)
   const [inputValue, setInputValue] = useState('')
+  // Autocomplétion
+  const [suggestions,    setSuggestions]    = useState<string[]>([])
+  const [showSugg,       setShowSugg]       = useState(false)
+  const [suggIndex,      setSuggIndex]      = useState(-1)
+  const [loadingSugg,    setLoadingSugg]    = useState(false)
+  const autocompleteRef  = useRef<HTMLDivElement>(null)
+  const debounceRef      = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [category, setCategory] = useState<string>('general')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -1151,7 +1158,63 @@ function ChatView() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [currentConversation?.messages?.length])
 
-  // Approuver une réponse pour l'apprentissage en temps réel
+  // ─── Autocomplétion ────────────────────────────────────────────
+  const fetchSuggestions = useCallback(async (val: string) => {
+    if (val.trim().length < 2) { setSuggestions([]); setShowSugg(false); return }
+    setLoadingSugg(true)
+    try {
+      const res  = await fetch('/api/autocomplete', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ input: val, language: currentLang }),
+      })
+      const data = await res.json()
+      if (data.suggestions?.length) {
+        setSuggestions(data.suggestions)
+        setShowSugg(true)
+        setSuggIndex(-1)
+      } else {
+        setShowSugg(false)
+      }
+    } catch { setShowSugg(false) }
+    finally  { setLoadingSugg(false) }
+  }, [currentLang])
+
+  const handleInputChange = useCallback((val: string) => {
+    setInputValue(val)
+    setSuggIndex(-1)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    if (val.trim().length < 2) { setSuggestions([]); setShowSugg(false); return }
+    debounceRef.current = setTimeout(() => fetchSuggestions(val), 350)
+  }, [fetchSuggestions])
+
+  const applySuggestion = useCallback((s: string) => {
+    setInputValue(s)
+    setShowSugg(false)
+    setSuggestions([])
+    inputRef.current?.focus()
+  }, [])
+
+  const handleSuggKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (!showSugg) return
+    if (e.key === 'ArrowDown')  { e.preventDefault(); setSuggIndex(i => Math.min(i + 1, suggestions.length - 1)) }
+    if (e.key === 'ArrowUp')    { e.preventDefault(); setSuggIndex(i => Math.max(i - 1, -1)) }
+    if (e.key === 'Tab' || e.key === 'Enter') {
+      if (suggIndex >= 0) { e.preventDefault(); applySuggestion(suggestions[suggIndex]) }
+    }
+    if (e.key === 'Escape')     { setShowSugg(false) }
+  }, [showSugg, suggestions, suggIndex, applySuggestion])
+
+  // Fermer suggestions si clic en dehors
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (autocompleteRef.current && !autocompleteRef.current.contains(e.target as Node))
+        setShowSugg(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
   const handleApprove = async (msg: any) => {
     if (feedbackGiven.has(msg.id) || feedbackNegative.has(msg.id)) return
     const msgs = currentConversation?.messages ?? []
@@ -2049,16 +2112,59 @@ function ChatView() {
               style={{ background: 'var(--background)', border: '1px solid var(--border)' }}
               onFocus={e => e.currentTarget.style.borderColor = '#00c6a7'}
               onBlur={e => e.currentTarget.style.borderColor = 'var(--border)'}>
-              <textarea
-                ref={inputRef}
-                value={inputValue}
-                onChange={e => { setInputValue(e.target.value); autoResize(e.target) }}
-                onKeyDown={handleKeyDown}
-                placeholder={t('chat.placeholder', currentLang)}
-                rows={1}
-                className="flex-1 bg-transparent border-none outline-none resize-none max-h-[120px] leading-relaxed py-1 text-sm"
-                style={{ color: 'var(--foreground)' }}
-              />
+              <div ref={autocompleteRef} className="flex-1 relative">
+                <textarea
+                  ref={inputRef}
+                  value={inputValue}
+                  onChange={e => { handleInputChange(e.target.value); autoResize(e.target) }}
+                  onKeyDown={e => { handleSuggKeyDown(e); handleKeyDown(e) }}
+                  placeholder={t('chat.placeholder', currentLang)}
+                  rows={1}
+                  className="w-full bg-transparent border-none outline-none resize-none max-h-[120px] leading-relaxed py-1 text-sm"
+                  style={{ color: 'var(--foreground)' }}
+                />
+                {/* ── Dropdown autocomplétion ── */}
+                {showSugg && suggestions.length > 0 && (
+                  <div className="absolute bottom-full left-0 right-0 mb-1 rounded-xl overflow-hidden z-50 shadow-xl"
+                    style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
+                    {loadingSugg && (
+                      <div className="px-3 py-2 text-[11px] flex items-center gap-1.5" style={{ color: '#484f58' }}>
+                        <svg className="animate-spin w-3 h-3" viewBox="0 0 24 24" fill="none">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                        </svg>
+                        Suggestions en cours…
+                      </div>
+                    )}
+                    {suggestions.map((s, i) => (
+                      <button
+                        key={i}
+                        onMouseDown={e => { e.preventDefault(); applySuggestion(s) }}
+                        className="w-full text-left px-3 py-2 text-[12px] flex items-center gap-2 transition-colors"
+                        style={{
+                          background:  i === suggIndex ? 'rgba(0,198,167,.12)' : 'transparent',
+                          color:       i === suggIndex ? '#00c6a7' : 'var(--foreground)',
+                          borderBottom: i < suggestions.length - 1 ? '1px solid var(--border)' : 'none',
+                        }}>
+                        <span style={{ color: '#484f58', fontSize: 10 }}>🩺</span>
+                        <span className="truncate">{s}</span>
+                        {i === suggIndex && (
+                          <span className="ml-auto text-[9px] px-1 py-0.5 rounded shrink-0"
+                            style={{ background: 'rgba(0,198,167,.15)', color: '#00c6a7' }}>
+                            ↵
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                    <div className="px-3 py-1 text-[9px] flex items-center justify-between"
+                      style={{ borderTop: '1px solid var(--border)', color: '#484f58' }}>
+                      <span>↑↓ naviguer · Tab accepter · Esc fermer</span>
+                      <button onMouseDown={() => setShowSugg(false)} className="hover:text-white transition-colors">✕</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+              </div>
               <div className="flex gap-1.5 items-center flex-shrink-0">
                 {/* Microphone button */}
                 {!isRecording && !isTranscribing && (
