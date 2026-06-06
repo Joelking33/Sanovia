@@ -1856,63 +1856,42 @@ function ChatView() {
                               </span>
                             </div>
                           )}
-                          {feedbackNegative.has(msg.id) && (() => {
-                            const r = correctionResult[msg.id]
-                            if (!r) return (
+                          {feedbackNegative.has(msg.id) && (
+                            <div className="mt-1">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <TTSPlayButton text={msg.content} language={msg.language} />
-                                <span className="text-[11px] px-2 py-1 rounded-lg"
-                                  style={{ background: 'rgba(239,68,68,.12)', color: '#f87171' }}>
-                                  🔄 Correction envoyée
-                                </span>
-                              </div>
-                            )
-                            // Approuvé
-                            if (r.status === 'approved') return (
-                              <div className="mt-1">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <TTSPlayButton text={msg.content} language={msg.language} />
+                                {!correctionResult[msg.id] && (
+                                  <span className="text-[11px] px-2 py-1 rounded-lg"
+                                    style={{ background: 'rgba(239,68,68,.12)', color: '#f87171' }}>
+                                    🔄 Correction envoyée
+                                  </span>
+                                )}
+                                {correctionResult[msg.id]?.status === 'approved' && (
                                   <span className="text-[11px] px-2 py-1 rounded-lg"
                                     style={{ background: 'rgba(0,198,167,.12)', color: '#00c6a7' }}>
-                                    ✅ Correction validée ({r.confidence}%) — l'IA va s'améliorer !
+                                    ✅ Validée ({correctionResult[msg.id]?.confidence}%) — l'IA va s'améliorer !
                                   </span>
-                                </div>
-                                {r.reason && (
-                                  <p className="text-[10px] mt-1 ml-1" style={{ color: '#484f58' }}>
-                                    🔍 {r.reason}
-                                    {r.sources?.length > 0 && ` · Sources : ${r.sources.slice(0,2).join(', ')}`}
-                                  </p>
                                 )}
-                              </div>
-                            )
-                            // Rejeté
-                            if (r.status === 'rejected') return (
-                              <div className="mt-1">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <TTSPlayButton text={msg.content} language={msg.language} />
+                                {correctionResult[msg.id]?.status === 'rejected' && (
                                   <span className="text-[11px] px-2 py-1 rounded-lg"
                                     style={{ background: 'rgba(239,68,68,.12)', color: '#f87171' }}>
                                     ❌ Correction rejetée par l'IA
                                   </span>
-                                </div>
-                                {r.reason && (
-                                  <p className="text-[10px] mt-1 ml-1" style={{ color: '#f87171', opacity: 0.7 }}>
-                                    Raison : {r.reason}
-                                  </p>
+                                )}
+                                {correctionResult[msg.id]?.status === 'uncertain' && (
+                                  <span className="text-[11px] px-2 py-1 rounded-lg"
+                                    style={{ background: 'rgba(245,158,11,.12)', color: '#f59e0b' }}>
+                                    ⚠️ Incertaine — non utilisée ({correctionResult[msg.id]?.confidence}%)
+                                  </span>
                                 )}
                               </div>
-                            )
-                            // Incertain
-                            return (
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <TTSPlayButton text={msg.content} language={msg.language} />
-                                <span className="text-[11px] px-2 py-1 rounded-lg"
-                                  style={{ background: 'rgba(245,158,11,.12)', color: '#f59e0b' }}>
-                                  ⚠️ Correction incertaine — non utilisée ({r.confidence}%)
-                                </span>
-                              </div>
-                            )
-                          })()}
+                              {correctionResult[msg.id]?.reason && (
+                                <p className="text-[10px] mt-1 ml-1" style={{ color: '#484f58' }}>
+                                  🔍 {correctionResult[msg.id]?.reason}
+                                </p>
+                              )}
+                            </div>
+                          )}
 
                           {/* Zone de correction */}
                           {correcting === msg.id && (

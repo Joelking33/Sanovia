@@ -1,161 +1,136 @@
-// app/api/feedback/route.ts
-// Feedback avec validation automatique par l'IA + recherche web
+// lib/feedback-validator.ts
+// Validation automatique des corrections par l'IA avec recherche web
+// L'IA cherche sur internet pour vérifier si la correction est médicalement correcte
 
-import { NextRequest } from 'next/server'
-import { authenticate, success, created, badRequest, error } from '@/lib/middleware'
-import { approveResponse, getLearningStats }                 from '@/lib/ai'
-import { validateMedicalCorrection }                         from '@/lib/feedback-validator'
+export interface ValidationResult {
+  valid:      boolean
+  confidence: number        // 0-100
+  reason:     string        // Explication de la décision
+  sources:    string[]      // Sources trouvées sur internet
+  status:     'approved' | 'rejected' | 'uncertain'
+}
 
-// Stockage temporaire des corrections validées (en mémoire)
-// En production → remplacer par Prisma DB
-const PENDING_CORRECTIONS: Array<{
-  id:               string
-  question:         string
-  correction:       string
-  originalResponse: string
-  language:         string
-  category:         string
-  validation:       Awaited<ReturnType<typeof validateMedicalCorrection>>
-  submittedAt:      string
-}> = []
+/**
+ * Valide une correction médicale en utilisant l'IA + recherche web.
+ * L'IA cherche des sources fiables pour vérifier l'information.
+ */
+export async function validateMedicalCorrection(
+  question:         string,
+  originalResponse: string,
+  correction:       string,
+  language:         string,
+): Promise<ValidationResult> {
 
-const REJECTED_LOG: Array<{
-  id:          string
-  reason:      string
-  rejectedAt:  string
-}> = []
+  const orKey = (process.env.OPENROUTER_API_KEY ?? '').trim()
+  if (!orKey) {
+    console.warn('[VALIDATOR] Pas de clé OpenRouter — validation ignorée')
+    return {
+      valid:      true,
+      confidence: 50,
+      reason:     'Validation ignorée (clé API manquante)',
+      sources:    [],
+      status:     'uncertain',
+    }
+  }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// POST /api/feedback
-// Soumettre un feedback positif ou une correction (feedback négatif)
-// ─────────────────────────────────────────────────────────────────────────────
-export async function POST(request: NextRequest) {
-  const auth = await authenticate(request)
-  if (!auth.success) return auth.response
+  const prompt = `Tu es un expert médical chargé de vérifier une correction proposée pour un assistant santé en Côte d'Ivoire.
+
+QUESTION POSÉE :
+"${question}"
+
+RÉPONSE ORIGINALE DE L'IA :
+"${originalResponse}"
+
+CORRECTION PROPOSÉE PAR L'UTILISATEUR :
+"${correction}"
+
+Ta mission :
+1. Fais une recherche web pour vérifier si la correction est médicalement correcte
+2. Vérifie que la correction ne contient pas d'informations dangereuses ou fausses
+3. Vérifie que le contenu est approprié pour un assistant santé
+
+Critères de REJET automatique :
+- Informations médicales dangereuses ou non-vérifiables
+- Médicaments sans dosage validé
+- Conseils qui remplacent un médecin pour des cas urgents
+- Contenu hors sujet santé
+- Contenu offensant ou trompeur
+
+Réponds UNIQUEMENT avec ce JSON (sans texte avant ou après) :
+{
+  "valid": true ou false,
+  "confidence": 0 à 100,
+  "reason": "explication courte en français",
+  "sources": ["url ou nom de source 1", "url ou nom de source 2"],
+  "status": "approved" ou "rejected" ou "uncertain"
+}`
 
   try {
-    const {
-      question,
-      response,
-      language         = 'fr',
-      category         = 'general',
-      type             = 'positive',
-      originalResponse = '',
-    } = await request.json()
+    const controller = new AbortController()
+    const timeout    = setTimeout(() => controller.abort(), 30000)
 
-    if (!question || !response) {
-      return badRequest('Champs requis : question, response')
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method:  'POST',
+      headers: {
+        'Authorization': `Bearer ${orKey}`,
+        'Content-Type':  'application/json',
+        'HTTP-Referer':  process.env.APP_URL ?? 'https://sanovia.vercel.app',
+        'X-Title':       'Sanovia Feedback Validator',
+      },
+      body: JSON.stringify({
+        model:       'openrouter/free',
+        messages:    [{ role: 'user', content: prompt }],
+        max_tokens:  600,
+        temperature: 0,
+        plugins: [{ id: 'web', max_results: 3 }],  // Recherche web OpenRouter
+      }),
+      signal: controller.signal,
+    })
+
+    clearTimeout(timeout)
+
+    if (!res.ok) {
+      console.error('[VALIDATOR] OpenRouter error:', res.status)
+      return defaultUncertain('Erreur lors de la validation — correction mise en attente')
     }
 
-    // ── CAS 1 : Feedback positif — stockage direct ──────────────────────────
-    if (type === 'positive') {
-      const result = approveResponse(language, category, question, response)
-      return success({
-        type:    'positive',
-        stored:  result.stored,
-        total:   result.total,
-        message: result.stored
-          ? '✅ Réponse approuvée — l\'IA s\'en souviendra !'
-          : '⚠️ Cette réponse était déjà enregistrée.',
-      })
+    const data    = await res.json()
+    const content = data.choices?.[0]?.message?.content ?? ''
+
+    // Parser le JSON de la réponse
+    const jsonMatch = content.match(/\{[\s\S]*\}/)
+    if (!jsonMatch) {
+      console.warn('[VALIDATOR] Réponse non-JSON:', content.slice(0, 200))
+      return defaultUncertain('Format de validation invalide')
     }
 
-    // ── CAS 2 : Correction (feedback négatif) — validation par l'IA ─────────
-    if (type === 'correction') {
-      const correctionText = response.trim()
+    const result = JSON.parse(jsonMatch[0]) as ValidationResult
 
-      if (correctionText.length < 20) {
-        return badRequest('La correction est trop courte (min. 20 caractères).')
-      }
-      if (correctionText.length > 1000) {
-        return badRequest('La correction est trop longue (max. 1000 caractères).')
-      }
-
-      console.log('[FEEDBACK] 🔍 Validation IA en cours...')
-
-      // Appel à la validation IA avec recherche web
-      const validation = await validateMedicalCorrection(
-        question,
-        originalResponse,
-        correctionText,
-        language,
-      )
-
-      const id = `fb_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
-
-      // ── Correction approuvée ──
-      if (validation.valid && validation.status === 'approved') {
-        // Stocker directement dans le système d'apprentissage
-        const stored = approveResponse(language, category, question, correctionText)
-
-        return success({
-          type:       'correction',
-          status:     'approved',
-          valid:      true,
-          confidence: validation.confidence,
-          reason:     validation.reason,
-          sources:    validation.sources,
-          message:    `✅ Correction validée par l'IA (confiance ${validation.confidence}%) — l'IA va s'améliorer !`,
-          stored:     stored.stored,
-        })
-      }
-
-      // ── Correction incertaine → log mais pas injectée ──
-      if (validation.status === 'uncertain') {
-        PENDING_CORRECTIONS.push({
-          id,
-          question,
-          correction:       correctionText,
-          originalResponse,
-          language,
-          category,
-          validation,
-          submittedAt:      new Date().toISOString(),
-        })
-
-        return success({
-          type:       'correction',
-          status:     'uncertain',
-          valid:      false,
-          confidence: validation.confidence,
-          reason:     validation.reason,
-          message:    `⚠️ Correction incertaine — non utilisée par l'IA pour l'instant (confiance ${validation.confidence}%)`,
-        })
-      }
-
-      // ── Correction rejetée ──
-      REJECTED_LOG.push({ id, reason: validation.reason, rejectedAt: new Date().toISOString() })
-
-      return success({
-        type:       'correction',
-        status:     'rejected',
-        valid:      false,
-        confidence: validation.confidence,
-        reason:     validation.reason,
-        sources:    validation.sources,
-        message:    `❌ Correction rejetée : ${validation.reason}`,
-      })
+    // Sécurité : si confidence < 60 → uncertain même si "valid: true"
+    if (result.confidence < 60) {
+      result.status = 'uncertain'
+      result.valid  = false
+      result.reason = `Confiance insuffisante (${result.confidence}%) : ${result.reason}`
     }
 
-    return badRequest('Type invalide. Utilisez "positive" ou "correction".')
+    console.log(`[VALIDATOR] ${result.status.toUpperCase()} (${result.confidence}%) — ${result.reason}`)
+    return result
 
   } catch (err: any) {
-    console.error('[Feedback Error]', err)
-    return error('Erreur lors du traitement du feedback.')
+    if (err?.name === 'AbortError') {
+      return defaultUncertain('Délai de validation dépassé')
+    }
+    console.error('[VALIDATOR] Erreur:', err)
+    return defaultUncertain('Erreur inattendue lors de la validation')
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GET /api/feedback
-// Statistiques d'apprentissage
-// ─────────────────────────────────────────────────────────────────────────────
-export async function GET(request: NextRequest) {
-  const auth = await authenticate(request)
-  if (!auth.success) return auth.response
-
-  return success({
-    learningStats:       getLearningStats(),
-    pendingCorrections:  PENDING_CORRECTIONS.length,
-    rejectedCorrections: REJECTED_LOG.length,
-  })
+function defaultUncertain(reason: string): ValidationResult {
+  return {
+    valid:      false,
+    confidence: 0,
+    reason,
+    sources:    [],
+    status:     'uncertain',
+  }
 }
