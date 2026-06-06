@@ -2143,7 +2143,6 @@ function ChatView() {
                   </div>
                 )}
               </div>
-              </div>
               <div className="flex gap-1.5 items-center flex-shrink-0">
                 {/* Microphone button */}
                 {!isRecording && !isTranscribing && (
