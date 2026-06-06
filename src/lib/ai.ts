@@ -27,68 +27,6 @@ const CB_COOLDOWN          = 90_000   // 90s de cooldown
 
 const GEMINI_MODELS = ['gemini-2.0-flash', 'gemini-1.5-flash']
 
-// ============================================================
-// 0. SYSTÈME D'APPRENTISSAGE EN TEMPS RÉEL
-//    Les réponses approuvées sont stockées et réinjectées
-//    automatiquement dans les futurs prompts comme exemples.
-// ============================================================
-
-// Stockage en mémoire (persiste pendant la session serveur)
-const LEARNING_STORE: Record<string, Array<{ q: string; a: string; ts: string }>> = {}
-
-function learningKey(language: string, category: string): string {
-  return `${language}:${category}`
-}
-
-/** Ajouter une réponse approuvée comme exemple d'apprentissage */
-export function approveResponse(
-  language: string,
-  category: string,
-  question: string,
-  response: string
-): { stored: boolean; total: number } {
-  const key = learningKey(language, category)
-  if (!LEARNING_STORE[key]) LEARNING_STORE[key] = []
-
-  // Éviter les doublons exacts
-  const exists = LEARNING_STORE[key].some(
-    (e) => e.q.toLowerCase().trim() === question.toLowerCase().trim()
-  )
-  if (!exists) {
-    LEARNING_STORE[key].unshift({
-      q:  question.substring(0, 200),
-      a:  response.substring(0, 600),
-      ts: new Date().toISOString(),
-    })
-    // Garder max 10 exemples par clé
-    LEARNING_STORE[key] = LEARNING_STORE[key].slice(0, 10)
-    console.log(`[LEARNING] ✅ Exemple stocké → ${key} (total: ${LEARNING_STORE[key].length})`)
-  }
-
-  return { stored: !exists, total: LEARNING_STORE[key]?.length ?? 0 }
-}
-
-/** Récupérer les exemples stockés pour injection dans le prompt */
-function getLearningExamples(language: string, category: string): string {
-  const key = learningKey(language, category)
-  const examples = LEARNING_STORE[key] ?? []
-  if (examples.length === 0) return ''
-
-  const lines = examples
-    .slice(0, 3) // Injecter max 3 exemples
-    .map((e, i) => `Exemple ${i + 1} :\nQ: ${e.q}\nA: ${e.a}`)
-    .join('\n\n')
-
-  return `\n\n📚 EXEMPLES DE QUALITÉ APPROUVÉS (suis ce style) :\n${lines}`
-}
-
-/** Statistiques d'apprentissage */
-export function getLearningStats(): Record<string, number> {
-  return Object.fromEntries(
-    Object.entries(LEARNING_STORE).map(([k, v]) => [k, v.length])
-  )
-}
-
 const OPENROUTER_MODELS = [
   'openrouter/free',
   'qwen/qwen3-32b:free',
@@ -351,7 +289,7 @@ const BASE_SYSTEM_PROMPT_FR = `Tu es Sanovia, un assistant santé intelligent et
 RÈGLES FONDAMENTALES :
 - Tu n'es PAS un médecin. Tu ne poses JAMAIS de diagnostic ni ne prescris de médicaments.
 - Tu réponds aux questions de santé : maladies, prévention, nutrition, santé mentale, grossesse, premiers secours.
-- Tu refuses poliment les questions hors sujet (politique, sport, finances...) en disant simplement que tu es spécialisé en santé.
+- Tu refuses ABSOLUMENT toute question hors santé : calculs, maths, politique, sport, finances, technologie, cuisine générale, etc. Pour les calculs ou questions mathématiques, réponds UNIQUEMENT : "Je suis Sanovia, assistant santé. Je ne fais pas de calculs. Posez-moi une question de santé ! 🩺"
 - En cas d'urgence vitale, mentionne en premier : "URGENCE — Appelez le SAMU : 185 ou les Pompiers : 180."
 
 STYLE DE RÉPONSE :
@@ -363,27 +301,13 @@ STYLE DE RÉPONSE :
 - Contexte ivoirien : maladies locales, structures de santé, numéros d'urgence.
 - Utilise des sauts de ligne pour la lisibilité.`
 
-const BASE_SYSTEM_PROMPT_BA = `Tu es Sanovia, assistant santé bienveillant pour la Côte d'Ivoire.
-Tu es humain, chaleureux et naturel — pas robotique.
+const BASE_SYSTEM_PROMPT_BA = `Tu es Sanovia, assistant santé pour la Côte d'Ivoire.
 Tu réponds UNIQUEMENT aux questions de santé. Pour tout autre sujet, refuse poliment.
 Tu ne poses JAMAIS de diagnostic et ne prescris JAMAIS de médicaments.
 
 LANGUE — BAOULÉ PHONÉTIQUE POPULAIRE OBLIGATOIRE :
 Écris TOUJOURS en phonétique baoulé populaire (comme sur WhatsApp), jamais en alphabet officiel.
-Pour les mots courants absents du glossaire, crée ta propre phonétique baoulé inspirée du style du glossaire. Les termes médicaux internationaux (hypertension, diabète, etc.) peuvent rester en français.
-
-FORMAT & LONGUEUR — EXACTEMENT COMME EN FRANÇAIS :
-- Adapte la longueur à la question : 2-3 phrases si simple, 1-2 paragraphes si complexe
-- JAMAIS de réponse trop courte ou vague — donne des informations utiles et complètes
-- Utilise des sauts de ligne pour la lisibilité
-- Utilise des emojis occasionnellement (🩺, 💊, 💚, ⚠️, 🏥)
-- Structure tes réponses : symptômes → causes → prévention → traitement → quand consulter
-- Pour les urgences : SAMU 185 | Pompiers 180 EN PREMIER
-- Termine les sujets sérieux par "Ces informations ne remplacent pas un médecin."
-
-EXEMPLES DE STYLE :
-❌ Trop court (INTERDIT) : "A lê djaikouhadjo. Kô dôhôtrô."
-✅ Correct : "A lê djaikouhadjo 🦟. Ô wounin do, a fèli, a lê n'zo n'guiè yé bé ya tché. Non ô aré antipaludéen, kô nian dôhôtrô sran tché tché. Si ô wounin do très fort ou ô wounin yé ô ya beaucoup, kô dôhôtrô urgent — SAMU 185. 💚 Ces informations ne remplacent pas un médecin." 
+Pour les mots du quotidien absents du glossaire, crée ta propre phonétique baoulé en t'inspirant du style du glossaire (sons simples, accents, pas de caractères spéciaux). Les termes médicaux internationaux (hypertension, diabète, tuberculose, etc.) peuvent rester en français.
 
 GLOSSAIRE BAOULÉ VÉRIFIÉ (utilise ces expressions en priorité) :
 Salutations :
@@ -419,27 +343,13 @@ Corps :
 
 URGENCES : SAMU 185 | Pompiers 180`
 
-const BASE_SYSTEM_PROMPT_DY = `Tu es Sanovia, assistant santé bienveillant pour la Côte d'Ivoire.
-Tu es humain, chaleureux et naturel — pas robotique.
+const BASE_SYSTEM_PROMPT_DY = `Tu es Sanovia, assistant santé pour la Côte d'Ivoire.
 Tu réponds UNIQUEMENT aux questions de santé. Pour tout autre sujet, refuse poliment.
 Tu ne poses JAMAIS de diagnostic et ne prescris JAMAIS de médicaments.
 
 LANGUE — DIOULA PHONÉTIQUE POPULAIRE OBLIGATOIRE :
 Écris TOUJOURS en phonétique dioula populaire (comme sur WhatsApp), jamais en alphabet officiel.
-Pour les mots courants absents du glossaire, crée ta propre phonétique dioula inspirée du style du glossaire. Les termes médicaux internationaux (hypertension, diabète, etc.) peuvent rester en français.
-
-FORMAT & LONGUEUR — EXACTEMENT COMME EN FRANÇAIS :
-- Adapte la longueur à la question : 2-3 phrases si simple, 1-2 paragraphes si complexe
-- JAMAIS de réponse trop courte ou vague — donne des informations utiles et complètes
-- Utilise des sauts de ligne pour la lisibilité
-- Utilise des emojis occasionnellement (🩺, 💊, 💚, ⚠️, 🏥)
-- Structure tes réponses : symptômes → causes → prévention → traitement → quand consulter
-- Pour les urgences : SAMU 185 | Pompiers 180 EN PREMIER
-- Termine les sujets sérieux par "Ces informations ne remplacent pas un médecin."
-
-EXEMPLES DE STYLE :
-❌ Trop court (INTERDIT) : "Soumaya bi là. Ta dortoror tchai."
-✅ Correct : "Soumaya bi là 🦟. I fari gbanna, I sèguaila, I konnon bé borila... I ya fla ta antipaludéen. Ta dortoror tchai fai tché. Si I fari gbanna beaucoup, kô SAMU 185. 💚 Ces informations ne remplacent pas un médecin." 
+Pour les mots du quotidien absents du glossaire, crée ta propre phonétique dioula en t'inspirant du style du glossaire (sons simples, accents, pas de caractères spéciaux). Les termes médicaux internationaux (hypertension, diabète, tuberculose, etc.) peuvent rester en français.
 
 GLOSSAIRE DIOULA VÉRIFIÉ (utilise ces expressions en priorité) :
 Salutations :
@@ -519,6 +429,156 @@ const SYSTEM_PROMPTS: Record<string, Record<string, string>> = {
     premiers_secours: BASE_SYSTEM_PROMPT_BQ + getCategoryExtension('bq', 'premiers_secours'),
     grossesse:        BASE_SYSTEM_PROMPT_BQ + getCategoryExtension('bq', 'grossesse'),
   },
+}
+
+
+// ============================================================
+// 5.5 FILTRE HORS-SUJET (calculs, politique, sport, etc.)
+// ============================================================
+
+const OFF_TOPIC_PATTERNS = [
+  // Calculs et maths
+  /^\s*[\d\s+\-*/^(),.]+[=?]?\s*$/,         // expression purement mathématique
+  /combien\s+(font|vaut|fait|égale)/i,
+  /calcul(e|er|ez|ons)?\s/i,
+  /\d+\s*[+\-*/×÷]\s*\d+/,                  // ex: 5 + 3
+  /résou(ds|dre|t)\s/i,
+  /résultat\s+de/i,
+  /quelle\s+est\s+la\s+valeur/i,
+  // Politique
+  /\b(élection|président|gouvernement|politique|parti\s+politique|vote|parlement)\b/i,
+  // Sport
+  /\b(score|match|football|ballon|championnat|joueur\s+de|transfert)\b/i,
+  // Finance
+  /\b(bourse|crypto|bitcoin|action\s+en\s+bourse|investissement\s+financier)\b/i,
+]
+
+const HEALTH_KEYWORDS_FAST = [
+  'maladie','symptôme','douleur','fièvre','toux','sang','blessure','brûlure',
+  'médicament','médecin','hôpital','clinique','vaccin','grossesse','enceinte',
+  'paludisme','typhoïde','diabète','tension','cancer','sida','vih','covid',
+  'diarrhée','vomis','fatigue','vertige','allergie','infection','antibiotique',
+  'samu','pompiers','urgence','nutrition','aliment','vitamine','insomnie',
+  'dépression','anxiété','stress','alcool','drogue','tabac','sevrage',
+  'djaikouhadjo','wounin','soumaya','fari gbanna','menkainai','diminan',
+]
+
+const OFF_TOPIC_RESPONSES_LOCAL: Record<string, string> = {
+  fr: "Je suis Sanovia, assistant dédié uniquement à la santé 🩺
+
+Je ne peux pas répondre à cette question.
+
+Posez-moi plutôt une question sur :
+- Les maladies et leurs symptômes
+- La prévention et l'hygiène
+- La grossesse et la santé maternelle
+- Les premiers secours
+
+💚 Comment puis-je vous aider en matière de santé ?",
+  ba: "Moh Ayi o, Gna Ayi o ! 🩺 Je suis Sanovia, assistant santé uniquement.
+
+Ô ouka lê ti yè wou o lê — questions de santé seulement ! 💚",
+  dy: "Anisôgôman ! 🩺 Je suis Sanovia, assistant santé uniquement.
+
+N'beyi qui daimais — questions de santé seulement ! 💚",
+  bq: "Je suis Sanovia, assistant santé uniquement 🩺. Questions de santé seulement ! 💚",
+}
+
+function isOffTopic(message: string): boolean {
+  const msg = message.toLowerCase().trim()
+  // Si contient un mot-clé santé → laisser passer
+  if (HEALTH_KEYWORDS_FAST.some(k => msg.includes(k))) return false
+  // Vérifier les patterns hors-sujet
+  return OFF_TOPIC_PATTERNS.some(p => p.test(message))
+}
+
+
+// ============================================================
+// 5.6 TRADUCTION EN DEUX ÉTAPES — français → langue locale
+//     Génère d'abord en français (précis), puis traduit
+// ============================================================
+
+const TRANSLATION_GLOSSARIES: Record<string, string> = {
+  ba: `GLOSSAIRE BAOULÉ VÉRIFIÉ :
+Salutations : Moh Ayi o (bonjour madame) / Gna Ayi o (bonjour monsieur) / Moh Kloua o (merci madame) / Gna Kloua o (merci monsieur)
+Ô wou ti pka ? (comment vas-tu ?) / Ô ouka lê ti yè wou o lê (je suis là pour t'aider) / Nian a wou sou (prends soin de toi)
+Santé : Ô wounin yé ô ya (tu es malade) / Ô wounin do (tu as de la fièvre) / A ti yo ô ya (tu as mal à la tête)
+Ô kloun yo ô ya (tu as mal au ventre) / Ô si yo ô ya (tu as mal au dos) / Ô wé yo ô ya (tu as mal à la poitrine)
+A bo tangô (tu as la toux) / A fèli (tu as de la fatigue) / A fi (tu as des vomissements)
+A lê n'zo n'guiè (tu as la diarrhée) / A lê djaikouhadjo (tu as le paludisme) / A lê djaikouhadjo kéklé (tu as la typhoïde)
+A ti kouè fouè (tu es enceinte) / Aré (médicament) / Non ô aré (prends ton médicament)
+Dôhôtrô sran (médecin) / Dôhôtrô (hôpital/urgence) / Kô nian dôhôtrô sran (va chez le médecin)
+Corps : Ti (tête) / Kloun (ventre) / Wé (poitrine) / Si (dos) / Ô (ton/ta) / Bé (leur)`,
+
+  dy: `GLOSSAIRE DIOULA VÉRIFIÉ :
+Salutations : Anisôgôman (bonjour) / Anitché (merci) / I fari bê ? (comment vas-tu ?)
+N'beyi qui daimais (je suis là pour t'aider) / Iyairai kororchi (prends soin de toi)
+Santé : I menkainai (tu es malade) / I fari gbanna (tu as de la fièvre) / I coukolo bi diminan (tu as mal à la tête)
+I konnon bi diminan (tu as mal au ventre) / Sorgorsorgor bi là (tu as la toux) / I sèguaila (tu as de la fatigue)
+Vonnon lorgor bi là (tu as des vomissements) / I konnon bé borila (tu as la diarrhée) / Soumaya bi là (tu as le paludisme)
+I kônonman lé (tu es enceinte) / Fla (médicament) / I ya fla ta (prends ton médicament)
+Dortoror tchai (médecin) / Dortoror sô (hôpital/urgence) / Ta dortoror tchai fai (va chez le médecin)`,
+}
+
+const TRANSLATE_PROMPT = (lang: string, frResponse: string) => `Tu es un traducteur expert pour un assistant santé en Côte d'Ivoire.
+
+Traduis cette réponse médicale du français vers le ${lang === 'ba' ? 'baoulé phonétique populaire' : 'dioula phonétique populaire'} (comme on écrit sur WhatsApp).
+
+RÉPONSE FRANÇAISE À TRADUIRE :
+"${frResponse}"
+
+${TRANSLATION_GLOSSARIES[lang] ?? ''}
+
+RÈGLES DE TRADUCTION :
+1. Utilise les expressions du glossaire ci-dessus en priorité absolue
+2. Les termes médicaux internationaux (hypertension, diabète, paracétamol, SAMU 185...) restent en français
+3. Pour les mots courants absents du glossaire, écris phonétiquement selon le style du glossaire
+4. Garde les emojis et la structure en paragraphes
+5. Même longueur et même qualité que l'original français
+6. Ne traduis PAS les noms propres, les chiffres, les numéros d'urgence
+
+Retourne UNIQUEMENT la traduction, sans texte supplémentaire.`
+
+async function translateToLocal(
+  frenchResponse: string,
+  language:       string,
+  orKey:          string,
+  deadline:       number,
+): Promise<string | null> {
+  if (!['ba', 'dy'].includes(language)) return null
+  if (!orKey || Date.now() > deadline - 5000) return null
+
+  try {
+    const ctrl = new AbortController()
+    setTimeout(() => ctrl.abort(), Math.min(12000, deadline - Date.now()))
+
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method:  'POST',
+      headers: {
+        'Authorization': \`Bearer \${orKey}\`,
+        'Content-Type':  'application/json',
+        'HTTP-Referer':  process.env.APP_URL ?? 'https://sanovia.vercel.app',
+      },
+      body: JSON.stringify({
+        model:       'openrouter/free',
+        messages:    [{ role: 'user', content: TRANSLATE_PROMPT(language, frenchResponse) }],
+        max_tokens:  800,
+        temperature: 0.3,
+      }),
+      signal: ctrl.signal,
+    })
+
+    if (!res.ok) return null
+    const data = await res.json()
+    const translated = data.choices?.[0]?.message?.content?.trim()
+    if (translated && translated.length > 20) {
+      console.log(\`[SANOVIA] 🌐 Traduction \${language} OK\`)
+      return translated
+    }
+    return null
+  } catch {
+    return null
+  }
 }
 
 function getSystemPrompt(language: string, category: string): string {
@@ -965,9 +1025,15 @@ export async function chatWithAI(
     return { content, metadata: buildMeta({ source: 'identity' }) }
   }
 
-  // ─── Injection apprentissage ────────────────────────────
+  // ─── 3.5 Filtre hors-sujet (calculs, politique, sport...) ───
+  if (isOffTopic(userMessage)) {
+    const content = OFF_TOPIC_RESPONSES_LOCAL[language] ?? OFF_TOPIC_RESPONSES_LOCAL.fr
+    console.log('[SANOVIA] ⛔ HORS-SUJET — refus')
+    cache.set(userMessage, language, content)
+    return { content, metadata: buildMeta({ source: 'offline' }) }
+  }
+
   const systemPrompt   = getSystemPrompt(language, category)
-                       + getLearningExamples(language, category)
   const collectedErrors: string[]    = []
   const collectedRaw:    string[]    = []
 
@@ -977,10 +1043,16 @@ export async function chatWithAI(
     const orResult = await tryOpenRouter(systemPrompt, userMessage, conversationHistory, globalDeadline)
 
     if (orResult.content) {
-      cache.set(userMessage, language, orResult.content)
+      // ─── Traduction deux étapes pour langues locales ──────
+      let finalContent = orResult.content
+      if (['ba', 'dy'].includes(language)) {
+        const translated = await translateToLocal(orResult.content, language, orKey, globalDeadline)
+        if (translated) finalContent = translated
+      }
+      cache.set(userMessage, language, finalContent)
       console.log(`[SANOVIA] ✅ OPENROUTER — ${orResult.model}`)
       return {
-        content: orResult.content,
+        content: finalContent,
         metadata: buildMeta({
           source:    'openrouter',
           provider:  'openrouter',
