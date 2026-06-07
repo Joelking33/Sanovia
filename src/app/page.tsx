@@ -958,150 +958,144 @@ function VoiceMessagePlayer({ audioBase64, format = 'mp3', role, language }: {
 // ============================================================
 // TTS PLAY BUTTON (for bot messages)
 // ============================================================
-function TTSPlayButton({ text, language }: { text: string; language: string }) {
+// Fixes : 1) Chrome 15s bug  2) Chargement voix asynchrone
+//         3) Nettoyage emojis client-side  4) Gestion erreurs
+// ============================================================
+function TTSPlayButton({ text, language, gender = 'female' }: {
+  text: string; language: string; gender?: 'male' | 'female'
+}) {
   const lang = (language || 'fr') as Language
   const [isLoading, setIsLoading] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
-  const [audioBase64, setAudioBase64] = useState<string | null>(null)
-  // Map language codes to BCP 47 voice locale codes for SpeechSynthesis
+  const resumeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // Nettoyage emojis client-side (sans appel API)
+  const cleanText = (raw: string): string => raw
+    .replace(/\p{Emoji}/gu, '')
+    .replace(/\*{1,2}([^*]+)\*{1,2}/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim()
+
   const langVoiceMap: Record<string, string> = {
-    fr: 'fr-FR',
-    ba: 'fr-CI',   // Baoulé — fallback to French (Ivory Coast)
-    dy: 'fr-CI',   // Dioula — fallback to French (Ivory Coast)
-    bq: 'fr-CI'    // Bété — fallback to French (Ivory Coast)
+    fr: 'fr-FR', ba: 'fr-FR', dy: 'fr-FR', bq: 'fr-FR',
   }
 
-  const handlePlay = async () => {
-    // If already speaking, toggle pause/resume
-    if (window.speechSynthesis.speaking) {
-      if (isPlaying) {
-        window.speechSynthesis.pause()
-        setIsPlaying(false)
-      } else {
-        window.speechSynthesis.resume()
-        setIsPlaying(true)
-      }
-      return
-    }
+  const VOICE_PARAMS = {
+    male:   { pitch: 0.75, rate: 0.90,
+              keywords: ['thomas','nicolas','pierre','paul','luca','male','homme','henri'] },
+    female: { pitch: 1.20, rate: 0.95,
+              keywords: ['amelie','amélie','alice','marie','lea','elsa','claire','female','femme'] },
+  }
 
-    setIsLoading(true)
-    try {
-      const token = localStorage.getItem('sanoovia_token')
-      if (!token) return
+  const findBestVoice = (voices: SpeechSynthesisVoice[], targetLang: string, g: 'male' | 'female') => {
+    const kws = VOICE_PARAMS[g].keywords
+    const langCode = targetLang.split('-')[0]
+    const match1 = voices.find(v => v.lang.startsWith(langCode) && kws.some(k => v.name.toLowerCase().includes(k)))
+    if (match1) return match1
+    const match2 = voices.find(v => kws.some(k => v.name.toLowerCase().includes(k)))
+    if (match2) return match2
+    return voices.find(v => v.lang.startsWith(langCode)) || voices[0] || null
+  }
 
-      const res = await fetch('/api/voice/synthesize', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({ text, language })
-      })
-      const data = await res.json()
-      if (data.success) {
-        const textToSpeak = data.data.text || text
-
-        // Cancel any ongoing speech
-        window.speechSynthesis.cancel()
-
-        const utterance = new SpeechSynthesisUtterance(textToSpeak)
-        utterance.lang = langVoiceMap[language] || 'fr-FR'
-        utterance.rate = 0.95
-        utterance.pitch = 1
-
-        // Try to find a matching voice
-        const voices = window.speechSynthesis.getVoices()
-        const targetLang = langVoiceMap[language] || 'fr-FR'
-        const match = voices.find(v => v.lang === targetLang)
-          || voices.find(v => v.lang.startsWith(targetLang.split('-')[0]))
-        if (match) utterance.voice = match
-
-        utterance.onstart = () => setIsPlaying(true)
-        utterance.onend = () => {
-          setIsPlaying(false)
-          setAudioBase64(null)
-        }
-        utterance.onerror = () => {
-          setIsPlaying(false)
-          setAudioBase64(null)
-          console.error('TTS playback error')
-        }
-
-        window.speechSynthesis.speak(utterance)
-        setAudioBase64('playing')  // Mark as active (for UI toggle)
-      }
-    } catch (err) {
-      console.error('TTS generation error:', err)
-    }
+  const stopAll = () => {
+    if (resumeTimerRef.current) { clearInterval(resumeTimerRef.current); resumeTimerRef.current = null }
+    window.speechSynthesis?.cancel()
+    setIsPlaying(false)
     setIsLoading(false)
   }
 
-  const handleStop = () => {
-    window.speechSynthesis.cancel()
-    setIsPlaying(false)
-    setAudioBase64(null)
+  const handlePlay = () => {
+    if (typeof window === 'undefined' || !window.speechSynthesis) return
+    if (isPlaying) { stopAll(); return }
+    stopAll()
+    setIsLoading(true)
+
+    const textToSpeak = cleanText(text)
+    if (!textToSpeak) { setIsLoading(false); return }
+
+    const utterance  = new SpeechSynthesisUtterance(textToSpeak)
+    const targetLang = langVoiceMap[language] || 'fr-FR'
+    const params     = VOICE_PARAMS[gender]
+    utterance.lang   = targetLang
+    utterance.pitch  = params.pitch
+    utterance.rate   = params.rate
+    utterance.volume = 1
+
+    const doSpeak = (voices: SpeechSynthesisVoice[]) => {
+      const best = findBestVoice(voices, targetLang, gender)
+      if (best) utterance.voice = best
+
+      utterance.onstart = () => {
+        setIsLoading(false); setIsPlaying(true)
+        // Fix Chrome : s'arrête après ~15s sans ce timer
+        resumeTimerRef.current = setInterval(() => {
+          if (window.speechSynthesis.speaking && !window.speechSynthesis.paused) {
+            window.speechSynthesis.pause()
+            window.speechSynthesis.resume()
+          }
+        }, 10000)
+      }
+      utterance.onend   = () => stopAll()
+      utterance.onerror = (e) => { if (e.error !== 'interrupted') console.error('TTS:', e.error); stopAll() }
+      window.speechSynthesis.speak(utterance)
+    }
+
+    const voices = window.speechSynthesis.getVoices()
+    if (voices.length > 0) {
+      doSpeak(voices)
+    } else {
+      window.speechSynthesis.addEventListener('voiceschanged', () => {
+        doSpeak(window.speechSynthesis.getVoices())
+      }, { once: true })
+      // Forcer Chrome à charger les voix
+      const dummy = new SpeechSynthesisUtterance('')
+      window.speechSynthesis.speak(dummy)
+      window.speechSynthesis.cancel()
+    }
   }
 
+  useEffect(() => () => stopAll(), [])
+
   return (
-    <>
-      {!audioBase64 ? (
-        <button
-          onClick={handlePlay}
-          disabled={isLoading}
-          className="mt-1.5 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium cursor-pointer transition-all hover:opacity-80 disabled:opacity-40"
-          style={{ background: 'rgba(0,198,167,.1)', border: '1px solid rgba(0,198,167,.25)', color: '#00c6a7' }}
-          title={t('tts.listen', lang)}>
-          {isLoading ? (
-            <>
-              <div className="w-3 h-3 border-[1.5px] rounded-full animate-spin" style={{ borderColor: 'rgba(0,198,167,.3)', borderTopColor: '#00c6a7' }} />
-              {t('tts.generating', lang)}
-            </>
-          ) : (
-            <>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" opacity="0.3" />
-                <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
-                <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
-              </svg>
-              {t('tts.listenIn', lang, { lang: getLanguageInfo(lang).label })}
-            </>
-          )}
-        </button>
+    <button
+      onClick={handlePlay}
+      disabled={isLoading}
+      className="mt-1.5 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium cursor-pointer transition-all hover:opacity-80 disabled:opacity-40 active:scale-95"
+      style={{
+        background: isPlaying ? 'rgba(0,198,167,.2)' : 'rgba(0,198,167,.1)',
+        border: isPlaying ? '1px solid rgba(0,198,167,.4)' : '1px solid rgba(0,198,167,.25)',
+        color: '#00c6a7',
+      }}>
+      {isLoading ? (
+        <>
+          <div className="w-3 h-3 border-[1.5px] rounded-full animate-spin"
+            style={{ borderColor: 'rgba(0,198,167,.3)', borderTopColor: '#00c6a7' }} />
+          <span>Chargement…</span>
+        </>
+      ) : isPlaying ? (
+        <>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+            <rect x="6" y="4" width="4" height="16" rx="1" />
+            <rect x="14" y="4" width="4" height="16" rx="1" />
+          </svg>
+          <span>Arrêter</span>
+        </>
       ) : (
-        <button
-          onClick={isPlaying ? handleStop : handlePlay}
-          className="mt-1.5 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium cursor-pointer transition-all"
-          style={{
-            background: isPlaying ? 'rgba(0,198,167,.2)' : 'rgba(0,198,167,.1)',
-            border: isPlaying ? '1px solid rgba(0,198,167,.4)' : '1px solid rgba(0,198,167,.25)',
-            color: '#00c6a7'
-          }}
-          title={isPlaying ? t('tts.stop', lang) : t('tts.listen', lang)}>
-          {isPlaying ? (
-            <>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                <rect x="6" y="4" width="4" height="16" rx="1" />
-                <rect x="14" y="4" width="4" height="16" rx="1" />
-              </svg>
-              {t('tts.stop', lang)}
-            </>
-          ) : (
-            <>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" opacity="0.6">
-                <polygon points="5 3 19 12 5 21 5 3" />
-              </svg>
-              {t('tts.replay', lang)}
-            </>
-          )}
-        </button>
+        <>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor" opacity="0.4" />
+            <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+          </svg>
+          <span>Écouter</span>
+        </>
       )}
-    </>
+    </button>
   )
 }
 
-// ============================================================
-// CHAT VIEW
-// ============================================================
+
+
 function ChatView() {
   const { user, logout } = useAuthStore()
   const { conversations, currentConversation, fetchConversations, createConversation, selectConversation, sendMessage, deleteConversation, clearCurrent, isSendingMessage, isLoadingMessages, sendError, clearSendError } = useChatStore()
@@ -1137,6 +1131,17 @@ function ChatView() {
   const [transcriptionError, setTranscriptionError] = useState('')
   // Feedback apprentissage — tracker quels messages ont été approuvés/rejetés
   const [feedbackGiven, setFeedbackGiven] = useState<Set<string>>(new Set())
+  // Voix TTS : masculin ou féminin
+  const [voiceGender, setVoiceGender] = useState<'male' | 'female'>(() => {
+    if (typeof window !== 'undefined') {
+      return (localStorage.getItem('sanovia_voice_gender') as 'male' | 'female') || 'female'
+    }
+    return 'female'
+  })
+  // Persister le choix de voix
+  useEffect(() => {
+    localStorage.setItem('sanovia_voice_gender', voiceGender)
+  }, [voiceGender])
   const [feedbackNegative, setFeedbackNegative] = useState<Set<string>>(new Set())
   const [correcting, setCorrecting] = useState<string | null>(null)
   const [correctionText, setCorrectionText] = useState('')
@@ -1302,6 +1307,13 @@ function ChatView() {
     setDarkMode(!darkMode)
     document.documentElement.classList.toggle('dark')
     document.documentElement.classList.toggle('light')
+  }
+
+  // Basculer la voix masculin/féminin
+  const toggleVoiceGender = () => {
+    setVoiceGender(g => g === 'female' ? 'male' : 'female')
+    // Arrêter la lecture en cours si active
+    window.speechSynthesis.cancel()
   }
 
   // New conversation
@@ -1828,7 +1840,7 @@ function ChatView() {
                           {/* Boutons feedback */}
                           {!feedbackGiven.has(msg.id) && !feedbackNegative.has(msg.id) && correcting !== msg.id && (
                             <div className="flex items-center gap-2 flex-wrap">
-                              <TTSPlayButton text={msg.content} language={msg.language} />
+                              <TTSPlayButton text={msg.content} language={msg.language} gender={voiceGender} />
                               <button
                                 onClick={() => handleApprove(msg)}
                                 title="Bonne réponse — l'IA s'en souviendra"
@@ -1849,7 +1861,7 @@ function ChatView() {
                           {/* Confirmations */}
                           {feedbackGiven.has(msg.id) && (
                             <div className="flex items-center gap-2 flex-wrap">
-                              <TTSPlayButton text={msg.content} language={msg.language} />
+                              <TTSPlayButton text={msg.content} language={msg.language} gender={voiceGender} />
                               <span className="text-[11px] px-2 py-1 rounded-lg"
                                 style={{ background: 'rgba(0,198,167,.12)', color: '#00c6a7' }}>
                                 ✅ Approuvé — merci !
@@ -1859,7 +1871,7 @@ function ChatView() {
                           {feedbackNegative.has(msg.id) && (
                             <div className="mt-1">
                               <div className="flex items-center gap-2 flex-wrap">
-                                <TTSPlayButton text={msg.content} language={msg.language} />
+                                <TTSPlayButton text={msg.content} language={msg.language} gender={voiceGender} />
                                 {!correctionResult[msg.id] && (
                                   <span className="text-[11px] px-2 py-1 rounded-lg"
                                     style={{ background: 'rgba(239,68,68,.12)', color: '#f87171' }}>
@@ -2173,13 +2185,43 @@ function ChatView() {
               </div>
             </div>
 
-            {/* Voice hint bar */}
-            <div className="hidden md:flex items-center justify-center gap-1.5 mt-2 text-[10px]" style={{ color: '#484f58' }}>
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
-                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-              </svg>
-              <span>{t('voice.languageHint', currentLang, { lang: getLanguageInfo(currentLang).label })}</span>
+            {/* Voice hint bar + Gender toggle */}
+            <div className="flex items-center justify-between mt-2 px-1">
+              <div className="hidden md:flex items-center gap-1.5 text-[10px]" style={{ color: '#484f58' }}>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                </svg>
+                <span>{t('voice.languageHint', currentLang, { lang: getLanguageInfo(currentLang).label })}</span>
+              </div>
+              {/* Sélecteur de voix masculin/féminin */}
+              <div className="flex items-center gap-1 ml-auto">
+                <span className="text-[9px]" style={{ color: '#484f58' }}>Voix :</span>
+                <button
+                  onClick={() => setVoiceGender('female')}
+                  title="Voix féminine"
+                  className="text-[10px] px-2 py-0.5 rounded-l-lg transition-all"
+                  style={{
+                    background: voiceGender === 'female' ? 'rgba(0,198,167,.2)' : 'rgba(255,255,255,.04)',
+                    color: voiceGender === 'female' ? '#00c6a7' : '#484f58',
+                    border: '1px solid rgba(0,198,167,.2)',
+                    borderRight: 'none',
+                  }}>
+                  👩 Féminine
+                </button>
+                <button
+                  onClick={() => setVoiceGender('male')}
+                  title="Voix masculine"
+                  className="text-[10px] px-2 py-0.5 rounded-r-lg transition-all"
+                  style={{
+                    background: voiceGender === 'male' ? 'rgba(0,198,167,.2)' : 'rgba(255,255,255,.04)',
+                    color: voiceGender === 'male' ? '#00c6a7' : '#484f58',
+                    border: '1px solid rgba(0,198,167,.2)',
+                    borderLeft: 'none',
+                  }}>
+                  👨 Masculine
+                </button>
+              </div>
             </div>
           </div>
         </div>
