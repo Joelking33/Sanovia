@@ -289,7 +289,7 @@ const BASE_SYSTEM_PROMPT_FR = `Tu es Sanovia, un assistant santé intelligent et
 RÈGLES FONDAMENTALES :
 - Tu n'es PAS un médecin. Tu ne poses JAMAIS de diagnostic ni ne prescris de médicaments.
 - Tu réponds aux questions de santé : maladies, prévention, nutrition, santé mentale, grossesse, premiers secours.
-- Tu refuses ABSOLUMENT toute question hors santé : calculs, maths, politique, sport, finances, technologie, cuisine générale, etc. Pour les calculs ou questions mathématiques, réponds UNIQUEMENT : "Je suis Sanovia, assistant santé. Je ne fais pas de calculs. Posez-moi une question de santé ! 🩺"
+- Tu refuses poliment les questions hors sujet (politique, sport, finances...) en disant simplement que tu es spécialisé en santé.
 - En cas d'urgence vitale, mentionne en premier : "URGENCE — Appelez le SAMU : 185 ou les Pompiers : 180."
 
 STYLE DE RÉPONSE :
@@ -429,156 +429,6 @@ const SYSTEM_PROMPTS: Record<string, Record<string, string>> = {
     premiers_secours: BASE_SYSTEM_PROMPT_BQ + getCategoryExtension('bq', 'premiers_secours'),
     grossesse:        BASE_SYSTEM_PROMPT_BQ + getCategoryExtension('bq', 'grossesse'),
   },
-}
-
-
-// ============================================================
-// 5.5 FILTRE HORS-SUJET (calculs, politique, sport, etc.)
-// ============================================================
-
-const OFF_TOPIC_PATTERNS = [
-  // Calculs et maths
-  /^\s*[\d\s+\-*/^(),.]+[=?]?\s*$/,         // expression purement mathématique
-  /combien\s+(font|vaut|fait|égale)/i,
-  /calcul(e|er|ez|ons)?\s/i,
-  /\d+\s*[+\-*/×÷]\s*\d+/,                  // ex: 5 + 3
-  /résou(ds|dre|t)\s/i,
-  /résultat\s+de/i,
-  /quelle\s+est\s+la\s+valeur/i,
-  // Politique
-  /\b(élection|président|gouvernement|politique|parti\s+politique|vote|parlement)\b/i,
-  // Sport
-  /\b(score|match|football|ballon|championnat|joueur\s+de|transfert)\b/i,
-  // Finance
-  /\b(bourse|crypto|bitcoin|action\s+en\s+bourse|investissement\s+financier)\b/i,
-]
-
-const HEALTH_KEYWORDS_FAST = [
-  'maladie','symptôme','douleur','fièvre','toux','sang','blessure','brûlure',
-  'médicament','médecin','hôpital','clinique','vaccin','grossesse','enceinte',
-  'paludisme','typhoïde','diabète','tension','cancer','sida','vih','covid',
-  'diarrhée','vomis','fatigue','vertige','allergie','infection','antibiotique',
-  'samu','pompiers','urgence','nutrition','aliment','vitamine','insomnie',
-  'dépression','anxiété','stress','alcool','drogue','tabac','sevrage',
-  'djaikouhadjo','wounin','soumaya','fari gbanna','menkainai','diminan',
-]
-
-const OFF_TOPIC_RESPONSES_LOCAL: Record<string, string> = {
-  fr: "Je suis Sanovia, assistant dédié uniquement à la santé 🩺
-
-Je ne peux pas répondre à cette question.
-
-Posez-moi plutôt une question sur :
-- Les maladies et leurs symptômes
-- La prévention et l'hygiène
-- La grossesse et la santé maternelle
-- Les premiers secours
-
-💚 Comment puis-je vous aider en matière de santé ?",
-  ba: "Moh Ayi o, Gna Ayi o ! 🩺 Je suis Sanovia, assistant santé uniquement.
-
-Ô ouka lê ti yè wou o lê — questions de santé seulement ! 💚",
-  dy: "Anisôgôman ! 🩺 Je suis Sanovia, assistant santé uniquement.
-
-N'beyi qui daimais — questions de santé seulement ! 💚",
-  bq: "Je suis Sanovia, assistant santé uniquement 🩺. Questions de santé seulement ! 💚",
-}
-
-function isOffTopic(message: string): boolean {
-  const msg = message.toLowerCase().trim()
-  // Si contient un mot-clé santé → laisser passer
-  if (HEALTH_KEYWORDS_FAST.some(k => msg.includes(k))) return false
-  // Vérifier les patterns hors-sujet
-  return OFF_TOPIC_PATTERNS.some(p => p.test(message))
-}
-
-
-// ============================================================
-// 5.6 TRADUCTION EN DEUX ÉTAPES — français → langue locale
-//     Génère d'abord en français (précis), puis traduit
-// ============================================================
-
-const TRANSLATION_GLOSSARIES: Record<string, string> = {
-  ba: `GLOSSAIRE BAOULÉ VÉRIFIÉ :
-Salutations : Moh Ayi o (bonjour madame) / Gna Ayi o (bonjour monsieur) / Moh Kloua o (merci madame) / Gna Kloua o (merci monsieur)
-Ô wou ti pka ? (comment vas-tu ?) / Ô ouka lê ti yè wou o lê (je suis là pour t'aider) / Nian a wou sou (prends soin de toi)
-Santé : Ô wounin yé ô ya (tu es malade) / Ô wounin do (tu as de la fièvre) / A ti yo ô ya (tu as mal à la tête)
-Ô kloun yo ô ya (tu as mal au ventre) / Ô si yo ô ya (tu as mal au dos) / Ô wé yo ô ya (tu as mal à la poitrine)
-A bo tangô (tu as la toux) / A fèli (tu as de la fatigue) / A fi (tu as des vomissements)
-A lê n'zo n'guiè (tu as la diarrhée) / A lê djaikouhadjo (tu as le paludisme) / A lê djaikouhadjo kéklé (tu as la typhoïde)
-A ti kouè fouè (tu es enceinte) / Aré (médicament) / Non ô aré (prends ton médicament)
-Dôhôtrô sran (médecin) / Dôhôtrô (hôpital/urgence) / Kô nian dôhôtrô sran (va chez le médecin)
-Corps : Ti (tête) / Kloun (ventre) / Wé (poitrine) / Si (dos) / Ô (ton/ta) / Bé (leur)`,
-
-  dy: `GLOSSAIRE DIOULA VÉRIFIÉ :
-Salutations : Anisôgôman (bonjour) / Anitché (merci) / I fari bê ? (comment vas-tu ?)
-N'beyi qui daimais (je suis là pour t'aider) / Iyairai kororchi (prends soin de toi)
-Santé : I menkainai (tu es malade) / I fari gbanna (tu as de la fièvre) / I coukolo bi diminan (tu as mal à la tête)
-I konnon bi diminan (tu as mal au ventre) / Sorgorsorgor bi là (tu as la toux) / I sèguaila (tu as de la fatigue)
-Vonnon lorgor bi là (tu as des vomissements) / I konnon bé borila (tu as la diarrhée) / Soumaya bi là (tu as le paludisme)
-I kônonman lé (tu es enceinte) / Fla (médicament) / I ya fla ta (prends ton médicament)
-Dortoror tchai (médecin) / Dortoror sô (hôpital/urgence) / Ta dortoror tchai fai (va chez le médecin)`,
-}
-
-const TRANSLATE_PROMPT = (lang: string, frResponse: string) => `Tu es un traducteur expert pour un assistant santé en Côte d'Ivoire.
-
-Traduis cette réponse médicale du français vers le ${lang === 'ba' ? 'baoulé phonétique populaire' : 'dioula phonétique populaire'} (comme on écrit sur WhatsApp).
-
-RÉPONSE FRANÇAISE À TRADUIRE :
-"${frResponse}"
-
-${TRANSLATION_GLOSSARIES[lang] ?? ''}
-
-RÈGLES DE TRADUCTION :
-1. Utilise les expressions du glossaire ci-dessus en priorité absolue
-2. Les termes médicaux internationaux (hypertension, diabète, paracétamol, SAMU 185...) restent en français
-3. Pour les mots courants absents du glossaire, écris phonétiquement selon le style du glossaire
-4. Garde les emojis et la structure en paragraphes
-5. Même longueur et même qualité que l'original français
-6. Ne traduis PAS les noms propres, les chiffres, les numéros d'urgence
-
-Retourne UNIQUEMENT la traduction, sans texte supplémentaire.`
-
-async function translateToLocal(
-  frenchResponse: string,
-  language:       string,
-  orKey:          string,
-  deadline:       number,
-): Promise<string | null> {
-  if (!['ba', 'dy'].includes(language)) return null
-  if (!orKey || Date.now() > deadline - 5000) return null
-
-  try {
-    const ctrl = new AbortController()
-    setTimeout(() => ctrl.abort(), Math.min(12000, deadline - Date.now()))
-
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method:  'POST',
-      headers: {
-        'Authorization': \`Bearer \${orKey}\`,
-        'Content-Type':  'application/json',
-        'HTTP-Referer':  process.env.APP_URL ?? 'https://sanovia.vercel.app',
-      },
-      body: JSON.stringify({
-        model:       'openrouter/free',
-        messages:    [{ role: 'user', content: TRANSLATE_PROMPT(language, frenchResponse) }],
-        max_tokens:  800,
-        temperature: 0.3,
-      }),
-      signal: ctrl.signal,
-    })
-
-    if (!res.ok) return null
-    const data = await res.json()
-    const translated = data.choices?.[0]?.message?.content?.trim()
-    if (translated && translated.length > 20) {
-      console.log(\`[SANOVIA] 🌐 Traduction \${language} OK\`)
-      return translated
-    }
-    return null
-  } catch {
-    return null
-  }
 }
 
 function getSystemPrompt(language: string, category: string): string {
@@ -958,6 +808,61 @@ function getOfflineResponse(userMessage: string, language: string): string {
 // 11. FONCTION PRINCIPALE — chatWithAI
 // ============================================================
 
+
+// ============================================================
+// SYSTÈME D'APPRENTISSAGE EN TEMPS RÉEL
+// Stockage en mémoire des réponses approuvées
+// ============================================================
+
+const LEARNING_STORE: Record<string, Array<{ q: string; a: string; ts: string }>> = {}
+
+function learningKey(language: string, category: string): string {
+  return `${language}:${category}`
+}
+
+export function approveResponse(
+  language: string,
+  category: string,
+  question: string,
+  response: string
+): { stored: boolean; total: number } {
+  const key = learningKey(language, category)
+  if (!LEARNING_STORE[key]) LEARNING_STORE[key] = []
+
+  const exists = LEARNING_STORE[key].some(
+    (e) => e.q.toLowerCase().trim() === question.toLowerCase().trim()
+  )
+
+  if (!exists) {
+    LEARNING_STORE[key].unshift({
+      q:  question.substring(0, 200),
+      a:  response.substring(0, 600),
+      ts: new Date().toISOString(),
+    })
+    LEARNING_STORE[key] = LEARNING_STORE[key].slice(0, 10)
+    console.log(`[LEARNING] ✅ Stocké → ${key} (total: ${LEARNING_STORE[key].length})`)
+  }
+
+  return { stored: !exists, total: LEARNING_STORE[key]?.length ?? 0 }
+}
+
+export function getLearningStats(): Record<string, number> {
+  return Object.fromEntries(
+    Object.entries(LEARNING_STORE).map(([k, v]) => [k, v.length])
+  )
+}
+
+function getLearningExamples(language: string, category: string): string {
+  const key = learningKey(language, category)
+  const examples = LEARNING_STORE[key] ?? []
+  if (examples.length === 0) return ''
+  const lines = examples
+    .slice(0, 3)
+    .map((e, i) => `Exemple ${i + 1}:\nQ: ${e.q}\nA: ${e.a}`)
+    .join('\n\n')
+  return `\n\n📚 EXEMPLES DE QUALITÉ APPROUVÉS :\n${lines}`
+}
+
 export async function chatWithAI(
   userMessage:         string,
   language:            string        = 'fr',
@@ -1025,14 +930,6 @@ export async function chatWithAI(
     return { content, metadata: buildMeta({ source: 'identity' }) }
   }
 
-  // ─── 3.5 Filtre hors-sujet (calculs, politique, sport...) ───
-  if (isOffTopic(userMessage)) {
-    const content = OFF_TOPIC_RESPONSES_LOCAL[language] ?? OFF_TOPIC_RESPONSES_LOCAL.fr
-    console.log('[SANOVIA] ⛔ HORS-SUJET — refus')
-    cache.set(userMessage, language, content)
-    return { content, metadata: buildMeta({ source: 'offline' }) }
-  }
-
   const systemPrompt   = getSystemPrompt(language, category)
   const collectedErrors: string[]    = []
   const collectedRaw:    string[]    = []
@@ -1043,16 +940,10 @@ export async function chatWithAI(
     const orResult = await tryOpenRouter(systemPrompt, userMessage, conversationHistory, globalDeadline)
 
     if (orResult.content) {
-      // ─── Traduction deux étapes pour langues locales ──────
-      let finalContent = orResult.content
-      if (['ba', 'dy'].includes(language)) {
-        const translated = await translateToLocal(orResult.content, language, orKey, globalDeadline)
-        if (translated) finalContent = translated
-      }
-      cache.set(userMessage, language, finalContent)
+      cache.set(userMessage, language, orResult.content)
       console.log(`[SANOVIA] ✅ OPENROUTER — ${orResult.model}`)
       return {
-        content: finalContent,
+        content: orResult.content,
         metadata: buildMeta({
           source:    'openrouter',
           provider:  'openrouter',
