@@ -1496,8 +1496,10 @@ function ChatView() {
               Authorization: `Bearer ${token}`
             },
             body: JSON.stringify({
-              audio: base64Data,
-              language: user?.language || 'fr'
+              audio:    base64Data,
+              ext:      (audioBlob as any).ext || 'webm',
+              language: currentLang,
+              category,
             })
           })
           const data = await res.json()
