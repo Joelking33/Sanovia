@@ -961,6 +961,114 @@ function VoiceMessagePlayer({ audioBase64, format = 'mp3', role, language }: {
 // Fixes : 1) Chrome 15s bug  2) Chargement voix asynchrone
 //         3) Nettoyage emojis client-side  4) Gestion erreurs
 // ============================================================
+// ============================================================
+// MARKDOWN TEXT — Rendu propre du markdown de l'IA
+// Gère : **gras**, *italique*, # titres, - listes, `code`, ---
+// ============================================================
+function MarkdownText({ content, className = '' }: { content: string; className?: string }) {
+  const renderLine = (line: string, key: number) => {
+    // Titre ## ou ###
+    if (/^#{1,3}\s/.test(line)) {
+      const level = (line.match(/^#+/) || [''])[0].length
+      const text  = line.replace(/^#+\s*/, '')
+      const sizes = ['text-base font-bold', 'text-sm font-bold', 'text-xs font-semibold']
+      return (
+        <div key={key} className={`${sizes[level - 1] || sizes[2]} mt-2 mb-1`}
+          style={{ color: 'var(--foreground)' }}>
+          {renderInline(text)}
+        </div>
+      )
+    }
+    // Séparateur ---
+    if (/^(-{3,}|\*{3,})$/.test(line.trim())) {
+      return <hr key={key} className="my-2 opacity-20" style={{ borderColor: 'var(--border)' }} />
+    }
+    // Ligne vide
+    if (line.trim() === '') {
+      return <div key={key} className="h-2" />
+    }
+    // Liste - item ou • item ou * item
+    if (/^[\-\*•]\s/.test(line)) {
+      return (
+        <div key={key} className="flex gap-1.5 my-0.5">
+          <span className="mt-0.5 flex-shrink-0 text-[10px]" style={{ color: '#00c6a7' }}>▸</span>
+          <span>{renderInline(line.replace(/^[\-\*•]\s*/, ''))}</span>
+        </div>
+      )
+    }
+    // Ligne numérotée 1. item
+    if (/^\d+\.\s/.test(line)) {
+      const num  = line.match(/^(\d+)\./)?.[1]
+      const text = line.replace(/^\d+\.\s*/, '')
+      return (
+        <div key={key} className="flex gap-1.5 my-0.5">
+          <span className="flex-shrink-0 font-semibold text-[11px]" style={{ color: '#00c6a7' }}>{num}.</span>
+          <span>{renderInline(text)}</span>
+        </div>
+      )
+    }
+    // Texte normal
+    return <div key={key} className="leading-relaxed">{renderInline(line)}</div>
+  }
+
+  const renderInline = (text: string): React.ReactNode => {
+    // Traiter les patterns inline : **gras**, *italique*, `code`, ~~barré~~
+    const parts: React.ReactNode[] = []
+    let remaining = text
+    let i = 0
+
+    const patterns: Array<[RegExp, (m: string) => React.ReactNode]> = [
+      [/\*\*\*(.+?)\*\*\*/,   (m) => <strong key={i++}><em>{m.replace(/^\*\*\*|\*\*\*$/g,'')}</em></strong>],
+      [/\*\*(.+?)\*\*/,       (m) => <strong key={i++} className="font-semibold">{m.replace(/^\*\*|\*\*$/g,'')}</strong>],
+      [/\*(.+?)\*/,           (m) => <em key={i++} className="italic">{m.replace(/^\*|\*$/g,'')}</em>],
+      [/`([^`]+)`/,           (m) => <code key={i++} className="px-1 py-0.5 rounded text-[11px] font-mono"
+                                        style={{ background: 'rgba(0,198,167,.12)', color: '#00c6a7' }}>
+                                       {m.replace(/^`|`$/g,'')}
+                                     </code>],
+      [/~~(.+?)~~/,           (m) => <del key={i++} className="opacity-50">{m.replace(/^~~|~~$/g,'')}</del>],
+    ]
+
+    while (remaining.length > 0) {
+      let earliest: number | null = null
+      let matchedPattern: typeof patterns[0] | null = null
+
+      for (const pattern of patterns) {
+        const idx = remaining.search(pattern[0])
+        if (idx !== -1 && (earliest === null || idx < earliest)) {
+          earliest = idx
+          matchedPattern = pattern
+        }
+      }
+
+      if (earliest === null || matchedPattern === null) {
+        parts.push(remaining)
+        break
+      }
+
+      if (earliest > 0) parts.push(remaining.slice(0, earliest))
+
+      const match = remaining.match(matchedPattern[0])
+      if (match) {
+        parts.push(matchedPattern[1](match[0]))
+        remaining = remaining.slice(earliest + match[0].length)
+      } else {
+        parts.push(remaining)
+        break
+      }
+    }
+
+    return parts.length === 1 && typeof parts[0] === 'string' ? parts[0] : <>{parts}</>
+  }
+
+  const lines = content.split('\n')
+
+  return (
+    <div className={`text-sm ${className}`}>
+      {lines.map((line, idx) => renderLine(line, idx))}
+    </div>
+  )
+}
+
 function TTSPlayButton({ text, language, gender = 'female' }: {
   text: string; language: string; gender?: 'male' | 'female'
 }) {
@@ -1775,7 +1883,8 @@ function ChatView() {
                           <span className="text-base flex-shrink-0 mt-0.5">⚠️</span>
                           <div className="flex-1">
                             <div className="font-semibold text-xs mb-1" style={{ color: '#f87171' }}>Erreur</div>
-                            <div className="text-xs leading-relaxed opacity-90 whitespace-pre-wrap">{msg.content}</div>
+                            <div className="text-xs leading-relaxed opacity-90">
+                              <MarkdownText content={msg.content} /></div>
                             <button onClick={clearSendError}
                               className="mt-2 text-xs px-3 py-1 rounded-lg cursor-pointer transition-opacity hover:opacity-100 opacity-70"
                               style={{ background: 'rgba(239,68,68,.15)', color: '#fca5a5', border: '1px solid rgba(239,68,68,.25)' }}>
@@ -1824,13 +1933,13 @@ function ChatView() {
                               language={msg.language}
                             />
                             {/* Show transcription below the audio player */}
-                            <div className="mt-2 pt-2 text-xs opacity-80 whitespace-pre-wrap"
+                            <div className="mt-2 pt-2 text-xs opacity-80"
                               style={{ borderTop: '1px solid rgba(255,255,255,.15)' }}>
-                              {msg.content}
+                              <MarkdownText content={msg.content} />
                             </div>
                           </>
                         ) : (
-                          <div className="whitespace-pre-wrap">{msg.content}</div>
+                          <MarkdownText content={msg.content} />
                         )}
                       </div>
 
